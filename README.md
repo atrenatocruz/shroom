@@ -75,6 +75,26 @@ To grab a screenshot of whatever the TV shows (saved in `screenshots\`):
 powershell -ExecutionPolicy Bypass -File tools\screenshot.ps1
 ```
 
+## Fire TV (Amazon Fire OS)
+
+Fire OS locks Home to Amazon's launcher; nothing can replace it. Shroom gets around that with an opt-in
+accessibility service, **Shroom Home button**: whenever Amazon's home screen appears (Home button, boot,
+leaving an app), it opens Shroom over it. Nothing is disabled for this, and long-pressing Home for
+quick settings still works.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\install.ps1 -TvHost 192.168.1.6 -HomeHelper
+```
+
+On the TV: Settings > My Fire TV > About > press OK 7 times on the TV's name > back > Developer Options >
+ADB Debugging on. Tested on a Xiaomi TV F2 65" (Fire OS 8.1.8.5); its list is
+`debloat\xiaomi-f2-fire-tv\debloat.txt`. Amazon protects a few tracking packages, so the script reports
+them as "protected" and leaves them on. If a Fire OS update ever blocks the helper, you just get Amazon's
+home screen back; re-run install, or `restore.ps1` to undo everything.
+
+Hold OK > **Hide** removes a tile from Shroom (the app stays installed); Settings button >
+**Show Hidden Apps** brings them back.
+
 ## Debloating (optional, after the launcher works)
 
 Ads and tracking on most TVs come from manufacturer packages. `debloat\examples\` has tested lists
