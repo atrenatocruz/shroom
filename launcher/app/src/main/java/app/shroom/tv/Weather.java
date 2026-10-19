@@ -14,9 +14,8 @@ import java.net.URL;
 import java.net.URLEncoder;
 
 /**
- * Current temperature and conditions from Open-Meteo (free, no account, no key). The location is a
- * city you set, or else an approximate one from the TV's public IP (geojs.io), remembered for a day.
- * The only network traffic the launcher makes.
+ * Current temperature and conditions from Open-Meteo (free, no account, no key), for home
+ * (Charneca da Caparica, Almada) unless a city is set. The only network traffic the launcher makes.
  */
 final class Weather {
     interface Callback {
@@ -24,6 +23,8 @@ final class Weather {
     }
 
     private static final long LOCATION_TTL = 24 * 60 * 60 * 1000L;
+    /** Charneca da Caparica, Almada, Setúbal. Open-Meteo's place search doesn't know it by name. */
+    private static final double HOME_LAT = 38.6167, HOME_LON = -9.2000;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     static void fetch(SharedPreferences prefs, String city, Callback cb) {
@@ -43,22 +44,16 @@ final class Weather {
     }
 
     private static double[] location(SharedPreferences prefs, String city) throws Exception {
-        String key = city.isEmpty() ? "@ip" : city;
+        if (city.isEmpty()) return new double[]{HOME_LAT, HOME_LON};
+        String key = city;
         if (key.equals(prefs.getString("loc_key", ""))
                 && System.currentTimeMillis() - prefs.getLong("loc_time", 0) < LOCATION_TTL) {
             return new double[]{prefs.getFloat("loc_lat", 0), prefs.getFloat("loc_lon", 0)};
         }
-        double lat, lon;
-        if (city.isEmpty()) {
-            JSONObject geo = json("https://get.geojs.io/v1/ip/geo.json");
-            lat = Double.parseDouble(geo.getString("latitude"));
-            lon = Double.parseDouble(geo.getString("longitude"));
-        } else {
-            JSONArray r = json("https://geocoding-api.open-meteo.com/v1/search?count=1&name="
-                    + URLEncoder.encode(city, "UTF-8")).getJSONArray("results");
-            lat = r.getJSONObject(0).getDouble("latitude");
-            lon = r.getJSONObject(0).getDouble("longitude");
-        }
+        JSONArray r = json("https://geocoding-api.open-meteo.com/v1/search?count=1&name="
+                + URLEncoder.encode(city, "UTF-8")).getJSONArray("results");
+        double lat = r.getJSONObject(0).getDouble("latitude");
+        double lon = r.getJSONObject(0).getDouble("longitude");
         prefs.edit().putString("loc_key", key).putLong("loc_time", System.currentTimeMillis())
                 .putFloat("loc_lat", (float) lat).putFloat("loc_lon", (float) lon).apply();
         return new double[]{lat, lon};

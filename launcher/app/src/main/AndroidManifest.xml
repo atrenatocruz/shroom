@@ -4,7 +4,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- Only for the weather (Weather.java: Open-Meteo, plus geojs.io when no city is set). No ads,
+    <!-- Only for the weather (Weather.java, Open-Meteo). No ads,
          no analytics, nothing else goes out. -->
     <uses-permission android:name="android.permission.INTERNET" />
 

@@ -144,7 +144,7 @@ final class Apps {
         return prefs.getString("names", DEFAULT_NAMES);
     }
 
-    /** Weather location by city name; empty means "work it out from the network". */
+    /** Weather location by city name; empty means home, Charneca da Caparica. */
     String city() {
         return prefs.getString("city", "");
     }

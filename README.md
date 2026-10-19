@@ -26,8 +26,8 @@ Laid out like Apple TV:
   Choose Home App.
 - **Inputs** (HDMI, AV, Live TV) shows up as a tile at the end of the grid on TVs that have them.
 - A drifting **clock screensaver** (OLED-safe): TV Settings > Screensaver > "Shroom clock".
-- No ads and no analytics. The only thing that goes online is the weather: Open-Meteo (free, no
-  account), with an approximate location from geojs.io unless you set a city. About 220 KB.
+- No ads and no analytics. The only thing that goes online is the weather for Charneca da Caparica,
+  from Open-Meteo (free, no account). About 220 KB.
 
 ![All apps](docs/apps.png)
 
@@ -63,7 +63,7 @@ That disables (never uninstalls) the stock launcher. If Home then lands anywhere
 script switches everything back on by itself. On Google TV the setup wizard can grab Home; add
 `-AlsoDisable com.google.android.tungsten.setupwraith` in that case.
 
-Change the names in the greeting, or pin the weather to a city instead of the automatic location:
+Change the names in the greeting, or show the weather for another city:
 
 ```powershell
 tools\venv\Scripts\python.exe -I tools\tv.py "am start -n app.shroom.tv/.MainActivity --es names 'Raquel & Renato' --es city Lisbon"
