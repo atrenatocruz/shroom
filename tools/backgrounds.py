@@ -6,6 +6,7 @@ That folder is git-ignored, so personal or licensed pictures never reach GitHub.
     tools/venv/Scripts/python.exe -I tools/backgrounds.py %USERPROFILE%\\Desktop\\backgrounds
 """
 import os
+import shutil
 import sys
 
 from PIL import Image, ImageOps
@@ -17,7 +18,9 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "launcher",
 
 def main():
     src = sys.argv[1]
-    os.makedirs(OUT, exist_ok=True)
+    if os.path.isdir(OUT):
+        shutil.rmtree(OUT)   # mirror the folder: pictures you removed disappear from the TV too
+    os.makedirs(OUT)
     for name in sorted(os.listdir(src)):
         stem, ext = os.path.splitext(name)
         if ext.lower() not in (".jpg", ".jpeg", ".png", ".webp"):

@@ -93,7 +93,8 @@ them as "protected" and leaves them on. If a Fire OS update ever blocks the help
 home screen back; re-run install, or `restore.ps1` to undo everything.
 
 **Backgrounds** (settings button > Backgrounds): the sunset plus your own pictures. Moving through the
-list changes the screen live; OK keeps it, Back undoes. To add or change pictures, put them in a folder
+list changes the screen live; OK keeps it, Back undoes. **Change Every Day** at the top rotates through
+all of them, one per day. To add or change pictures, put them in a folder
 and run `tools\venv\Scripts\python.exe -I tools\backgrounds.py <folder>`, then `install.ps1` again.
 They're built into the app on this PC only: the folder is git-ignored, so they never go to GitHub.
 

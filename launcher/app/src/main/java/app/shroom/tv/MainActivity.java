@@ -513,7 +513,11 @@ public class MainActivity extends Activity {
         dateLine.setText(DateFormat.format(DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEEMMMMd"), now));
         if (!backgroundLoaded) {
             backgroundLoaded = true;
-            showBackground(apps.prefs().getString("background", SUNSET), 900);
+            backgroundDay = now.get(Calendar.DAY_OF_YEAR);
+            showBackground(currentBackground(), 900);
+        } else if (dailyBackground() && now.get(Calendar.DAY_OF_YEAR) != backgroundDay) {
+            backgroundDay = now.get(Calendar.DAY_OF_YEAR);
+            showBackground(currentBackground(), 1500);   // a new day, a new picture
         }
     }
 
@@ -522,7 +526,20 @@ public class MainActivity extends Activity {
     /** The built-in sky; every other background is a JPEG in assets/backgrounds (tools/backgrounds.py). */
     private static final String SUNSET = "sunset";
     private boolean backgroundLoaded;
-    private int backgroundToken;
+    private int backgroundToken, backgroundDay;
+
+    private boolean dailyBackground() {
+        return apps.prefs().getBoolean("background_daily", false);
+    }
+
+    /** The chosen picture, or with "Change Every Day" on, the next one in the list each day. */
+    private String currentBackground() {
+        if (!dailyBackground()) return apps.prefs().getString("background", SUNSET);
+        List<String> all = backgrounds();
+        long day = System.currentTimeMillis() / 86_400_000L
+                + java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 86_400_000L;
+        return all.get((int) (day % all.size()));
+    }
 
     private List<String> backgrounds() {
         List<String> out = new ArrayList<>();
@@ -569,17 +586,26 @@ public class MainActivity extends Activity {
 
     /** Settings > Backgrounds: moving through the list changes the screen behind it; OK keeps it, Back undoes. */
     private void backgroundPicker() {
-        final String current = apps.prefs().getString("background", SUNSET);
+        final boolean daily = dailyBackground();
+        final String current = currentBackground();
         List<String> keys = backgrounds();
-        String[] labels = new String[keys.size()];
-        Runnable[] pick = new Runnable[keys.size()], preview = new Runnable[keys.size()];
+        int n = keys.size() + 1;
+        String[] labels = new String[n];
+        Runnable[] pick = new Runnable[n], preview = new Runnable[n];
+        // First item: the daily switch. Choosing a picture below turns it off.
+        labels[0] = getString(R.string.change_daily) + (daily ? "  ✓" : "");
+        preview[0] = () -> showBackground(current, 450);
+        pick[0] = () -> {
+            apps.prefs().edit().putBoolean("background_daily", !daily).apply();
+            showBackground(currentBackground(), 450);
+        };
         int start = 0;
         for (int i = 0; i < keys.size(); i++) {
             final String key = keys.get(i);
-            labels[i] = backgroundLabel(key) + (key.equals(current) ? "  ✓" : "");
-            if (key.equals(current)) start = i;
-            preview[i] = () -> showBackground(key, 450);
-            pick[i] = () -> apps.prefs().edit().putString("background", key).apply();
+            labels[i + 1] = backgroundLabel(key) + (!daily && key.equals(current) ? "  ✓" : "");
+            if (!daily && key.equals(current)) start = i + 1;
+            preview[i + 1] = () -> showBackground(key, 450);
+            pick[i + 1] = () -> apps.prefs().edit().putString("background", key).putBoolean("background_daily", false).apply();
         }
         showMenu(getString(R.string.backgrounds), null, labels, pick, preview, () -> showBackground(current, 450), start);
     }
@@ -707,7 +733,9 @@ public class MainActivity extends Activity {
             buildTiles();
             focusDock(lastDock);
         });
-        if (canOpen(Settings.ACTION_HOME_SETTINGS)) {
+        // Fire OS has the screen but locks Home to Amazon's launcher, so the picker closes at once.
+        boolean fireOs = getPackageManager().resolveActivity(new Intent().setComponent(FIRE_SETTINGS), 0) != null;
+        if (!fireOs && canOpen(Settings.ACTION_HOME_SETTINGS)) {
             labels.add(getString(R.string.home_picker));
             actions.add(() -> openSettings(Settings.ACTION_HOME_SETTINGS));
         }
@@ -808,6 +836,20 @@ public class MainActivity extends Activity {
             panel.addView(b, lp);
         }
         View first = null;
+        // Long lists scroll inside the card instead of running off the screen.
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        final int maxVisible = 7;
+        if (labels.length > maxVisible) {
+            android.widget.ScrollView sv = new android.widget.ScrollView(this);
+            sv.setVerticalScrollBarEnabled(false);
+            sv.setVerticalFadingEdgeEnabled(true);
+            sv.setFadingEdgeLength(ui.u(24));
+            sv.addView(list);
+            panel.addView(sv, new LinearLayout.LayoutParams(-1, ui.u(12 + maxVisible * 44)));
+        } else {
+            panel.addView(list);
+        }
         for (int i = 0; i < labels.length; i++) {
             final Runnable r = actions[i];
             final Runnable focusAction = preview ? onFocus[i] : null;
@@ -829,7 +871,7 @@ public class MainActivity extends Activity {
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, ui.u(42));
             lp.topMargin = ui.u(i == 0 ? 12 : 2);
-            panel.addView(btn, lp);
+            list.addView(btn, lp);
             if (first == null || i == startAt) first = btn;
         }
         FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(ui.u(preview ? 260 : 300), -2,
