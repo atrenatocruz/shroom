@@ -349,10 +349,14 @@ public class MainActivity extends Activity {
         dockRow.removeAllViews();
         dockTiles.clear();
         List<Apps.Entry> favs = apps.favorites();
+        // Up to 7 apps fit the band by shrinking a little; more than that scroll.
+        float bandInner = 960 - 2 * (BAND_X + BAND_PAD_X);
+        int n = Math.max(1, Math.min(favs.size(), 7));
+        float dockW = Math.min(TILE_W, (bandInner - (n - 1) * GAP) / n), dockH = dockW * TILE_H / TILE_W;
         for (int i = 0; i < favs.size(); i++) {
             final int idx = i;
             final Apps.Entry e = favs.get(i);
-            Tile t = Tile.forApp(ui, e, TILE_W, TILE_H);
+            Tile t = Tile.forApp(ui, e, dockW, dockH);
             t.setOnFocusChangeListener((v, f) -> {
                 if (!f) return;
                 lastDock = idx;

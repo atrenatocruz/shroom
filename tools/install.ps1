@@ -59,12 +59,16 @@ if ($now -like "$ShroomPkg/*") {
 if ($HomeHelper) {
     $svc = "$ShroomPkg/app.shroom.tv.HomeService"
     $cur = Tv 'settings get secure enabled_accessibility_services'
+    # Always switch it off and on again: an app update or force-stop can leave it enabled but unbound.
+    $others = @(($cur -split ':') | Where-Object { $_ -and $_ -ne 'null' -and $_ -ne $svc })
     if ($cur -notlike "*$svc*") {
-        $val = if (-not $cur -or $cur -eq 'null') { $svc } else { "${cur}:$svc" }
         Add-Content -Path (Join-Path $backup 'changes.log') -Value "$(Get-Date -Format s) accessibility $svc"
-        Tv "settings put secure enabled_accessibility_services $val" | Out-Null
-        Tv 'settings put secure accessibility_enabled 1' | Out-Null
     }
+    $without = if ($others.Count) { $others -join ':' } else { '""' }
+    Tv "settings put secure enabled_accessibility_services $without" | Out-Null
+    Start-Sleep -Seconds 1
+    Tv "settings put secure enabled_accessibility_services $((@($others) + $svc) -join ':')" | Out-Null
+    Tv 'settings put secure accessibility_enabled 1' | Out-Null
     Start-Sleep -Seconds 2
     Tv 'input keyevent KEYCODE_HOME' | Out-Null
     Start-Sleep -Seconds 3

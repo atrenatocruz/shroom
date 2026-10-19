@@ -97,6 +97,10 @@ list changes the screen live; OK keeps it, Back undoes. To add or change picture
 and run `tools\venv\Scripts\python.exe -I tools\backgrounds.py <folder>`, then `install.ps1` again.
 They're built into the app on this PC only: the folder is git-ignored, so they never go to GitHub.
 
+**Custom icons and names**: put pictures named after each app's package (`com.netflix.ninja.jpg`) in a
+folder, plus an optional `labels.txt` with lines like `ar.tvplayer.tv=TV`, then run
+`toolsenv\Scripts\python.exe -I tools\icons.py <folder>` and `install.ps1` again. Also git-ignored.
+
 Hold OK > **Hide** removes a tile from Shroom (the app stays installed); Settings button >
 **Show Hidden Apps** brings them back.
 

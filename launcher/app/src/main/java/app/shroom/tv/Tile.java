@@ -35,7 +35,12 @@ final class Tile extends LinearLayout {
     static Tile forApp(Ui ui, Apps.Entry e, float w, float h) {
         ImageView iv = new ImageView(ui.ctx);
         int bg;
-        if (e.banner != null) {
+        if (e.custom != null) {
+            iv.setImageBitmap(e.custom);
+            iv.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            iv.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));
+            bg = e.customBg;
+        } else if (e.banner != null) {
             iv.setImageDrawable(e.banner);
             iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
             iv.setLayoutParams(new FrameLayout.LayoutParams(-1, -1));

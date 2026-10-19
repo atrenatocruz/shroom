@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 
@@ -25,15 +27,20 @@ final class Apps {
         final ComponentName component;
         final Drawable banner;
         final Drawable icon;
+        /** Your own picture for this app (assets/icons), drawn whole on a card of its corner colour. */
+        final Bitmap custom;
+        final int customBg;
         final int color;
 
-        Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
+        Entry(String label, ComponentName component, Drawable banner, Drawable icon, Bitmap custom) {
             this.label = label;
             this.pkg = component.getPackageName();
             this.component = component;
             this.banner = banner;
             this.icon = icon;
-            this.color = Ui.signatureColor(banner != null ? banner : icon);
+            this.custom = custom;
+            this.customBg = custom != null ? custom.getPixel(2, 2) : 0;
+            this.color = custom != null ? Ui.deepen(customBg) : Ui.signatureColor(banner != null ? banner : icon);
         }
     }
 
@@ -55,7 +62,6 @@ final class Apps {
     private static final String PLAY_STORE = "com.android.vending";
     /** Hidden until you choose otherwise: system stubs, operator demos and shortcuts nobody opens. */
     private static final List<String> HIDDEN_BY_DEFAULT = Arrays.asList(
-            "com.amazon.firebat",                // Luna shortcut
             "com.amazon.spiderpork",
             "com.amazon.tv.earlyaccess",
             "com.amazon.smarthomemapviewapp",
@@ -86,13 +92,36 @@ final class Apps {
             if (pkg.equals(ctx.getPackageName()) || byPkg.containsKey(pkg) || hidden.contains(pkg)) continue;
             Drawable banner = ri.activityInfo.loadBanner(pm);
             if (banner == null) banner = ri.activityInfo.applicationInfo.loadBanner(pm);
-            Entry e = new Entry(String.valueOf(ri.loadLabel(pm)),
-                    new ComponentName(pkg, ri.activityInfo.name), banner, ri.loadIcon(pm));
+            String label = customLabels().getProperty(pkg, String.valueOf(ri.loadLabel(pm)));
+            Entry e = new Entry(label, new ComponentName(pkg, ri.activityInfo.name), banner, ri.loadIcon(pm),
+                    customIcon(pkg));
             all.add(e);
             byPkg.put(pkg, e);
         }
         Collections.sort(all, (a, b) -> a.label.compareToIgnoreCase(b.label));
         if (!prefs.contains("favorites")) seedFavorites();
+        if (!prefs.getBoolean("fix_prime_video", false)) showPrimeVideo();
+    }
+
+    /**
+     * Fire TV's Prime Video is com.amazon.firebat, which an early build hid as "Luna". One time: unhide it
+     * and put it in the Top Row.
+     */
+    private void showPrimeVideo() {
+        final String prime = "com.amazon.firebat";
+        prefs.edit().putBoolean("fix_prime_video", true).apply();
+        String raw = prefs.getString("hidden", null);
+        if (raw != null && Arrays.asList(raw.split(",")).contains(prime)) {
+            List<String> h = new ArrayList<>(Arrays.asList(raw.split(",")));
+            h.remove(prime);
+            prefs.edit().putString("hidden", TextUtils.join(",", h)).apply();
+        }
+        List<String> f = favoritePkgs();
+        if (!f.contains(prime)) {
+            f.add(prime);   // ignored by favorites() while it isn't installed
+            saveFavorites(f);
+        }
+        reload();   // it may have been filtered out of this pass
     }
 
     private void seedFavorites() {
@@ -130,6 +159,29 @@ final class Apps {
 
     void saveFavorites(List<String> pkgs) {
         prefs.edit().putString("favorites", TextUtils.join(",", pkgs)).apply();
+    }
+
+    private java.util.Properties labels;
+
+    /** Renamed apps, from assets/icons/labels.txt (lines like {@code ar.tvplayer.tv=TV}). */
+    private java.util.Properties customLabels() {
+        if (labels == null) {
+            labels = new java.util.Properties();
+            try (java.io.InputStream in = ctx.getAssets().open("icons/labels.txt")) {
+                labels.load(new java.io.InputStreamReader(in, "UTF-8"));
+            } catch (java.io.IOException ignored) {
+                // no renames
+            }
+        }
+        return labels;
+    }
+
+    private Bitmap customIcon(String pkg) {
+        try (java.io.InputStream in = ctx.getAssets().open("icons/" + pkg + ".jpg")) {
+            return BitmapFactory.decodeStream(in);
+        } catch (java.io.IOException e) {
+            return null;
+        }
     }
 
     List<String> hiddenPkgs() {
