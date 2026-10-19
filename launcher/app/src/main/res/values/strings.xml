@@ -2,6 +2,10 @@
 <resources>
     <string name="app_name">Shroom</string>
     <string name="dream_name">Shroom clock</string>
+    <string name="greet_morning">Good morning</string>
+    <string name="greet_afternoon">Good afternoon</string>
+    <string name="greet_evening">Good evening</string>
+    <string name="greet_night">Good night</string>
     <string name="no_favorites">Hold OK on an app below to add it here</string>
     <string name="move">Move</string>
     <string name="remove_favorite">Remove from Top Row</string>
@@ -12,7 +16,7 @@
     <string name="live_tv">Live TV</string>
     <string name="tv_settings">TV Settings</string>
     <string name="screensaver">Screensaver</string>
-    <string name="about_body">No ads, no tracking, no internet access. Version %1$s</string>
+    <string name="about_body">No ads, no tracking. Only the weather goes online (Open-Meteo). Version %1$s</string>
     <string name="home_picker">Choose Home App</string>
     <string name="not_available">Not available on this TV</string>
     <string name="no_inputs">No inputs found on this device</string>

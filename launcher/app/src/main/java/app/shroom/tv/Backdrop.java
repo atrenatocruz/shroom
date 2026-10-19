@@ -79,7 +79,7 @@ final class Backdrop extends View {
     protected void onSizeChanged(int w, int h, int ow, int oh) {
         fitWall();
         topScrim.setShader(new LinearGradient(0, 0, 0, h * 0.18f, 0x59000000, 0x00000000, Shader.TileMode.CLAMP));
-        bottomScrim.setShader(new LinearGradient(0, h * 0.45f, 0, h, 0x00000000, 0xD9000000, Shader.TileMode.CLAMP));
+        bottomScrim.setShader(new LinearGradient(0, h * 0.55f, 0, h, 0x00000000, 0x8C000000, Shader.TileMode.CLAMP));
         updateGlowShader();
     }
 

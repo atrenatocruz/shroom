@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Paints the four time-of-day skies the launcher ships with (dawn, day, dusk, night).
+"""Paints the sunset sky the launcher ships with.
 
 Procedural, so there is no photo licence to worry about. Re-run after tweaking a palette:
     tools/venv/Scripts/python.exe -I tools/wallpapers.py launcher/app/src/main/res/drawable-nodpi
@@ -68,14 +68,9 @@ def sky(name, top, horizon, sun_xy, sun_rgb, cloud_dark, cloud_lit, cover, seed,
 
 
 SKIES = [
-    sky("sky_dawn", (64, 88, 140), (246, 190, 160), (0.72, 0.78), (255, 170, 120),
-        (92, 92, 130), (255, 214, 196), 0.55, 11),
-    sky("sky_day", (38, 104, 196), (168, 206, 238), (0.82, 0.04), (255, 226, 190),
-        (150, 168, 196), (250, 252, 255), 0.5, 23),
-    sky("sky_dusk", (30, 34, 78), (226, 92, 40), (0.3, 0.86), (255, 96, 30),
-        (38, 40, 82), (255, 120, 60), 0.62, 37),
-    sky("sky_night", (6, 9, 22), (26, 34, 70), (0.78, 0.2), (120, 140, 200),
-        (16, 20, 40), (70, 86, 130), 0.4, 53, stars=True),
+    # Deep blue overhead, a red-orange sunset burning through the cloud deck from low on the left.
+    sky("sky_sunset", (22, 30, 78), (232, 64, 26), (0.22, 0.97), (255, 78, 18),
+        (34, 34, 78), (255, 88, 34), 0.68, 37),
 ]
 
 if __name__ == "__main__":

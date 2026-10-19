@@ -28,6 +28,7 @@ import android.view.animation.DecelerateInterpolator;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -59,7 +60,9 @@ public class MainActivity extends Activity {
 
     private FrameLayout root, stage;
     private Backdrop backdrop;
-    private TextView clock;
+    private TextView clock, greeting, dateLine, weather;
+    private View header, settingsButton;
+    private long weatherAt;
     private LinearLayout dockRow, grid;
     private FrameLayout band;
     private HorizontalScrollView dockScroll;
@@ -69,7 +72,6 @@ public class MainActivity extends Activity {
     private int lastDock, lastGrid;
     private int moving = -1;
     private FrameLayout menu;
-    private int wallRes;
 
     // ---------------------------------------------------------------- lifecycle
 
@@ -78,6 +80,7 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         ui = new Ui(this);
         apps = new Apps(this);
+        readExtras(getIntent());
         buildUi();
         apps.reload();
         buildTiles();
@@ -99,11 +102,14 @@ public class MainActivity extends Activity {
         tf.addAction(Intent.ACTION_TIMEZONE_CHANGED);
         registerReceiver(tick, tf);
         refreshTime();
+        if (System.currentTimeMillis() - weatherAt > WEATHER_EVERY) refreshWeather();
+        main.postDelayed(weatherTimer, WEATHER_EVERY);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        main.removeCallbacks(weatherTimer);
         try {
             unregisterReceiver(tick);
         } catch (IllegalArgumentException ignored) {
@@ -123,6 +129,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (readExtras(intent)) refreshWeather();
         refreshTime();
         closeMenu();
         endMove();
@@ -134,6 +141,42 @@ public class MainActivity extends Activity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus && getCurrentFocus() == null && menu == null) focusDock(lastDock);
+    }
+
+    /**
+     * Settings over adb, no rebuild: {@code am start -n app.shroom.tv/.MainActivity --es names "Raquel & Renato"
+     * --es city Lisbon}. Returns whether anything changed.
+     */
+    private boolean readExtras(Intent i) {
+        if (i == null) return false;
+        boolean changed = false;
+        for (String key : new String[]{"names", "city"}) {
+            if (i.hasExtra(key)) {
+                apps.setText(key, i.getStringExtra(key));
+                i.removeExtra(key);
+                changed = true;
+            }
+        }
+        if (changed) apps.prefs().edit().remove("loc_key").apply();
+        return changed;
+    }
+
+    private static final long WEATHER_EVERY = 30 * 60 * 1000L;
+
+    private final Runnable weatherTimer = new Runnable() {
+        @Override
+        public void run() {
+            refreshWeather();
+            main.postDelayed(this, WEATHER_EVERY);
+        }
+    };
+
+    private void refreshWeather() {
+        weatherAt = System.currentTimeMillis();
+        Weather.fetch(apps.prefs(), apps.city(), text -> {
+            weather.setText(text == null ? "" : text);
+            weather.setVisibility(text == null || text.isEmpty() ? View.GONE : View.VISIBLE);
+        });
     }
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
@@ -194,7 +237,9 @@ public class MainActivity extends Activity {
         dockScroll.setClipChildren(false);
         dockScroll.setClipToPadding(false);
         dockScroll.setPadding(ui.u(BAND_PAD_X), ui.u(BAND_PAD_TOP), ui.u(BAND_PAD_X), ui.u(BAND_PAD_BOTTOM));
+        dockScroll.setFillViewport(true);   // a short Top Row is centred in the band, a long one scrolls
         dockRow = new LinearLayout(this);
+        dockRow.setGravity(Gravity.CENTER_HORIZONTAL);
         dockRow.setClipChildren(false);
         dockRow.setClipToPadding(false);
         dockScroll.addView(dockRow, new FrameLayout.LayoutParams(-2, -2));
@@ -208,19 +253,86 @@ public class MainActivity extends Activity {
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setClipChildren(false);
         grid.setClipToPadding(false);
-        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(-1, -2);
-        glp.leftMargin = ui.u(BAND_X + BAND_PAD_X);
+        // The grid is a centred block of COLUMNS tiles, lined up under the centred Top Row.
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(ui.u(COLUMNS * TILE_W + (COLUMNS - 1) * GAP), -2);
+        glp.gravity = Gravity.CENTER_HORIZONTAL;
         glp.topMargin = ui.u(GRID_GAP);
         col.addView(grid, glp);
 
-        clock = ui.text(19, 400, 0xF2FFFFFF);
-        clock.setShadowLayer(ui.u(6), 0, 0, 0x40000000);
-        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
-        clp.topMargin = ui.u(30);
-        clp.rightMargin = ui.u(BAND_X + 8);
-        root.addView(clock, clp);
+        root.addView(buildHeader(), new FrameLayout.LayoutParams(-1, ui.u(96), Gravity.TOP));
 
         setContentView(root);
+    }
+
+    /** Greeting and date top left; weather, the settings button and the clock top right. */
+    private View buildHeader() {
+        FrameLayout bar = new FrameLayout(this);
+        bar.setClipChildren(false);
+
+        LinearLayout left = new LinearLayout(this);
+        left.setOrientation(LinearLayout.VERTICAL);
+        greeting = ui.text(25, 500, Color.WHITE);
+        greeting.setShadowLayer(ui.u(10), 0, ui.u(1), 0x59000000);
+        dateLine = ui.text(14, 400, 0xCCFFFFFF);
+        dateLine.setShadowLayer(ui.u(8), 0, 0, 0x59000000);
+        left.addView(greeting);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-2, -2);
+        dlp.topMargin = ui.u(7);
+        left.addView(dateLine, dlp);
+        // Fixed width: a wrap_content column kept the width of the first text it measured and cut the greeting.
+        FrameLayout.LayoutParams llp = new FrameLayout.LayoutParams(ui.u(560), -2, Gravity.TOP | Gravity.START);
+        llp.leftMargin = ui.u(BAND_X + 8);
+        llp.topMargin = ui.u(30);
+        bar.addView(left, llp);
+        header = left;
+
+        LinearLayout right = new LinearLayout(this);
+        right.setGravity(Gravity.CENTER_VERTICAL);
+        right.setClipChildren(false);
+        weather = ui.text(16, 400, 0xE6FFFFFF);
+        weather.setShadowLayer(ui.u(8), 0, 0, 0x59000000);
+        weather.setVisibility(View.GONE);
+        right.addView(weather);
+
+        ImageView gear = new ImageView(this);
+        gear.setImageResource(R.drawable.ic_settings);
+        gear.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        gear.setPadding(ui.u(8), ui.u(8), ui.u(8), ui.u(8));
+        gear.setBackground(ui.round(0x29FFFFFF, 17));
+        gear.setFocusable(true);
+        gear.setId(View.generateViewId());
+        gear.setOnFocusChangeListener((v, f) -> {
+            v.setBackground(ui.round(f ? Color.WHITE : 0x29FFFFFF, 17));
+            ((ImageView) v).setColorFilter(f ? 0xFF111114 : Color.WHITE);
+            v.animate().scaleX(f ? 1.12f : 1f).scaleY(f ? 1.12f : 1f).setDuration(200).start();
+            if (f) showGrid(false);
+        });
+        gear.setOnClickListener(v -> homeMenu());
+        gear.setOnKeyListener((v, code, ev) -> {
+            if (ev.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                focusDock(lastDock);
+                return true;
+            }
+            return code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_LEFT
+                    || code == KeyEvent.KEYCODE_DPAD_RIGHT;
+        });
+        settingsButton = gear;
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(ui.u(34), ui.u(34));
+        glp.leftMargin = ui.u(18);
+        right.addView(gear, glp);
+
+        clock = ui.text(22, 400, Color.WHITE);
+        clock.setShadowLayer(ui.u(8), 0, 0, 0x59000000);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-2, -2);
+        clp.leftMargin = ui.u(18);
+        right.addView(clock, clp);
+
+        FrameLayout.LayoutParams rlp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        rlp.rightMargin = ui.u(BAND_X + 8);
+        rlp.topMargin = ui.u(28);
+        bar.addView(right, rlp);
+        return bar;
     }
 
     private void buildTiles() {
@@ -314,7 +426,7 @@ public class MainActivity extends Activity {
     private void wireFocus() {
         for (Tile t : dockTiles) {
             t.setId(View.generateViewId());
-            t.setNextFocusUpId(t.getId());
+            t.setNextFocusUpId(settingsButton.getId());
         }
         for (Tile t : gridTiles) t.setId(View.generateViewId());
         if (!dockTiles.isEmpty()) {
@@ -368,6 +480,7 @@ public class MainActivity extends Activity {
             backdrop.setDim(show ? 0.6f : 0f);
             if (show) backdrop.setGlow(0xFF15161B);
             band.animate().alpha(show ? 0f : 1f).setDuration(show ? 220 : 320).start();
+            header.animate().alpha(show ? 0f : 1f).setDuration(show ? 200 : 320).start();
         }
         stage.animate().translationY(target).setDuration(420).setInterpolator(glide).start();
     }
@@ -378,20 +491,24 @@ public class MainActivity extends Activity {
         Calendar now = Calendar.getInstance();
         int h = now.get(Calendar.HOUR_OF_DAY);
         clock.setText(DateFormat.format(DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", now));
-
-        int res = h >= 5 && h < 11 ? R.drawable.sky_dawn
-                : h >= 11 && h < 17 ? R.drawable.sky_day
-                : h >= 17 && h < 21 ? R.drawable.sky_dusk : R.drawable.sky_night;
-        if (res != wallRes) {
-            wallRes = res;
+        int greet = h >= 5 && h < 12 ? R.string.greet_morning
+                : h >= 12 && h < 18 ? R.string.greet_afternoon
+                : h >= 18 && h < 22 ? R.string.greet_evening : R.string.greet_night;
+        String names = apps.names();
+        greeting.setText(names.isEmpty() ? getString(greet) : getString(greet) + ", " + names);
+        dateLine.setText(DateFormat.format(DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEEMMMMd"), now));
+        if (!skyLoaded) {
+            skyLoaded = true;
             new Thread(() -> {
                 BitmapFactory.Options o = new BitmapFactory.Options();
                 o.inPreferredConfig = Bitmap.Config.RGB_565;   // half the memory; grain in the image hides banding
-                Bitmap b = BitmapFactory.decodeResource(getResources(), res, o);
+                Bitmap b = BitmapFactory.decodeResource(getResources(), R.drawable.sky_sunset, o);
                 main.post(() -> backdrop.setWallpaper(b));
             }, "sky").start();
         }
     }
+
+    private boolean skyLoaded;
 
     // ---------------------------------------------------------------- actions
 

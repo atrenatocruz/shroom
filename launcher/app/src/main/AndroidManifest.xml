@@ -4,7 +4,9 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
-    <!-- No INTERNET permission on purpose: the launcher cannot phone home or show ads. -->
+    <!-- Only for the weather (Weather.java: Open-Meteo, plus geojs.io when no city is set). No ads,
+         no analytics, nothing else goes out. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- Android 11+ package visibility: lets the launcher see the TV apps it shows as tiles. -->
     <queries>

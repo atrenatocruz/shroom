@@ -50,6 +50,9 @@ final class Apps {
             "com.plexapp.android",
             "org.xbmc.kodi");
     private static final int FIRST_RUN_COUNT = 5;
+    /** Always offered in the Top Row on first run, after the streaming apps. */
+    private static final String PLAY_STORE = "com.android.vending";
+    static final String DEFAULT_NAMES = "Raquel & Renato";
 
     private final Context ctx;
     private final SharedPreferences prefs;
@@ -84,7 +87,10 @@ final class Apps {
     private void seedFavorites() {
         List<String> picks = new ArrayList<>();
         for (String p : SUGGESTED) if (byPkg.containsKey(p) && picks.size() < FIRST_RUN_COUNT) picks.add(p);
-        for (Entry e : all) if (picks.size() < FIRST_RUN_COUNT && !picks.contains(e.pkg)) picks.add(e.pkg);
+        for (Entry e : all) {
+            if (picks.size() < FIRST_RUN_COUNT && !picks.contains(e.pkg) && !e.pkg.equals(PLAY_STORE)) picks.add(e.pkg);
+        }
+        if (byPkg.containsKey(PLAY_STORE)) picks.add(PLAY_STORE);
         saveFavorites(picks);
     }
 
@@ -131,5 +137,23 @@ final class Apps {
         Collections.swap(f, a, b);
         saveFavorites(f);
         return true;
+    }
+
+    /** Who the greeting is for; {@code am start -n app.shroom.tv/.MainActivity --es names "..."}. */
+    String names() {
+        return prefs.getString("names", DEFAULT_NAMES);
+    }
+
+    /** Weather location by city name; empty means "work it out from the network". */
+    String city() {
+        return prefs.getString("city", "");
+    }
+
+    void setText(String key, String value) {
+        prefs.edit().putString(key, value == null ? "" : value.trim()).apply();
+    }
+
+    SharedPreferences prefs() {
+        return prefs;
     }
 }
