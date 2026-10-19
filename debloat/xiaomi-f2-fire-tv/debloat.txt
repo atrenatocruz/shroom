@@ -46,12 +46,12 @@ com.amazon.tv.releasenotes
 #ALEXA com.amazon.tv.alexanotifications
 #ALEXA com.amazon.tv.alexaalerts
 #ALEXA com.amazon.audiohome
-#AMAZONAPPS com.amazon.bueller.photos            # Amazon Photos
-#AMAZONAPPS com.amazon.bueller.music             # Amazon Music
-#AMAZONAPPS com.amazon.gamehub                   # Luna / GameHub
-#AMAZONAPPS com.amazon.minitv.android.app        # Amazon MiniTV
-#AMAZONAPPS com.amazon.tahoe                     # Amazon Kids
-#AMAZONAPPS com.amazon.wifilocker                # saves Wi-Fi passwords to Amazon's cloud
+com.amazon.bueller.photos            # Amazon Photos
+com.amazon.bueller.music             # Amazon Music
+com.amazon.gamehub                   # Luna / GameHub
+com.amazon.minitv.android.app        # Amazon MiniTV
+com.amazon.tahoe                     # Amazon Kids
+com.amazon.wifilocker                # saves Wi-Fi passwords to Amazon's cloud
 #UPDATES com.amazon.device.software.ota
 #UPDATES com.amazon.device.software.ota.override
 #UPDATES com.amazon.tv.forcedotaupdater.v2

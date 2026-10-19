@@ -53,6 +53,15 @@ final class Apps {
     private static final int FIRST_RUN_COUNT = 5;
     /** Always offered in the Top Row on first run, after the streaming apps. */
     private static final String PLAY_STORE = "com.android.vending";
+    /** Hidden until you choose otherwise: system stubs, operator demos and shortcuts nobody opens. */
+    private static final List<String> HIDDEN_BY_DEFAULT = Arrays.asList(
+            "com.amazon.firebat",                // Luna shortcut
+            "com.amazon.spiderpork",
+            "com.amazon.tv.earlyaccess",
+            "com.amazon.smarthomemapviewapp",
+            "com.mediatek.opapp",                // satellite operator portals
+            "com.vewd.core.opapp",
+            "com.vewd.core.fvpplayer");
     static final String DEFAULT_NAMES = "Raquel & Renato";
 
     private final Context ctx;
@@ -66,6 +75,7 @@ final class Apps {
     }
 
     void reload() {
+        List<String> hidden = hiddenPkgs();
         PackageManager pm = ctx.getPackageManager();
         Intent probe = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
         all.clear();
@@ -73,7 +83,7 @@ final class Apps {
         for (ResolveInfo ri : pm.queryIntentActivities(probe, 0)) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
-            if (pkg.equals(ctx.getPackageName()) || byPkg.containsKey(pkg)) continue;
+            if (pkg.equals(ctx.getPackageName()) || byPkg.containsKey(pkg) || hidden.contains(pkg)) continue;
             Drawable banner = ri.activityInfo.loadBanner(pm);
             if (banner == null) banner = ri.activityInfo.applicationInfo.loadBanner(pm);
             Entry e = new Entry(String.valueOf(ri.loadLabel(pm)),
@@ -120,6 +130,30 @@ final class Apps {
 
     void saveFavorites(List<String> pkgs) {
         prefs.edit().putString("favorites", TextUtils.join(",", pkgs)).apply();
+    }
+
+    List<String> hiddenPkgs() {
+        String raw = prefs.getString("hidden", null);
+        List<String> out = new ArrayList<>();
+        if (raw == null) {
+            out.addAll(HIDDEN_BY_DEFAULT);
+            return out;
+        }
+        for (String p : raw.split(",")) if (!p.isEmpty()) out.add(p);
+        return out;
+    }
+
+    void hide(String pkg) {
+        List<String> h = hiddenPkgs();
+        if (!h.contains(pkg)) h.add(pkg);
+        prefs.edit().putString("hidden", TextUtils.join(",", h)).apply();
+        List<String> f = favoritePkgs();
+        if (f.remove(pkg)) saveFavorites(f);
+    }
+
+    /** Brings back everything you hid; the built-in hidden list stays hidden. */
+    void unhideAll() {
+        prefs.edit().putString("hidden", TextUtils.join(",", HIDDEN_BY_DEFAULT)).apply();
     }
 
     void toggleFavorite(String pkg) {

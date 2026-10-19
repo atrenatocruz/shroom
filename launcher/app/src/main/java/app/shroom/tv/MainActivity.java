@@ -61,7 +61,7 @@ public class MainActivity extends Activity {
     private FrameLayout root, stage;
     private Backdrop backdrop;
     private TextView clock, greeting, dateLine, weather;
-    private View header, settingsButton;
+    private View header, settingsButton, topFade;
     private long weatherAt;
     private LinearLayout dockRow, grid;
     private FrameLayout band;
@@ -259,6 +259,13 @@ public class MainActivity extends Activity {
         glp.topMargin = ui.u(GRID_GAP);
         col.addView(grid, glp);
 
+        // While browsing the grid, rows sliding up under the header fade into this.
+        topFade = new View(this);
+        topFade.setBackground(new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xF20A0A10, 0xCC0A0A10, 0x000A0A10}));
+        topFade.setAlpha(0f);
+        root.addView(topFade, new FrameLayout.LayoutParams(-1, ui.u(FOCUS_ROW_Y + 8), Gravity.TOP));
         root.addView(buildHeader(), new FrameLayout.LayoutParams(-1, ui.u(96), Gravity.TOP));
 
         setContentView(root);
@@ -480,6 +487,7 @@ public class MainActivity extends Activity {
             backdrop.setDim(show ? 0.6f : 0f);
             if (show) backdrop.setGlow(0xFF15161B);
             band.animate().alpha(show ? 0f : 1f).setDuration(show ? 220 : 320).start();
+            topFade.animate().alpha(show ? 1f : 0f).setDuration(show ? 220 : 320).start();
             header.animate().alpha(show ? 0f : 1f).setDuration(show ? 200 : 320).start();
         }
         stage.animate().translationY(target).setDuration(420).setInterpolator(glide).start();
@@ -563,23 +571,32 @@ public class MainActivity extends Activity {
     private void dockMenu(int idx, Apps.Entry e) {
         showMenu(e.label, null,
                 new String[]{getString(R.string.move), getString(R.string.remove_favorite),
-                        getString(R.string.app_info), getString(R.string.home_options)},
+                        getString(R.string.hide), getString(R.string.app_info)},
                 new Runnable[]{() -> startMove(idx), () -> {
                     apps.toggleFavorite(e.pkg);
                     buildTiles();
                     focusDock(idx);
-                }, () -> openAppInfo(e.pkg), this::homeMenu});
+                }, () -> hideApp(e), () -> openAppInfo(e.pkg)});
     }
 
     private void gridMenu(Apps.Entry e) {
         showMenu(e.label, null,
-                new String[]{getString(R.string.add_favorite), getString(R.string.app_info),
-                        getString(R.string.home_options)},
+                new String[]{getString(R.string.add_favorite), getString(R.string.hide), getString(R.string.app_info)},
                 new Runnable[]{() -> {
                     apps.toggleFavorite(e.pkg);
                     buildTiles();
                     focusDock(dockTiles.size() - 1);
-                }, () -> openAppInfo(e.pkg), this::homeMenu});
+                }, () -> hideApp(e), () -> openAppInfo(e.pkg)});
+    }
+
+    /** Hides a tile from Shroom only; the app itself stays installed and working. */
+    private void hideApp(Apps.Entry e) {
+        boolean wasGrid = inGrid;
+        apps.hide(e.pkg);
+        apps.reload();
+        buildTiles();
+        if (wasGrid) focusGrid(lastGrid);
+        else focusDock(lastDock);
     }
 
     /** The launcher's own options; also on the remote's Menu key. Includes the way back to stock. */
@@ -590,9 +607,16 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {
         }
         showMenu(getString(R.string.app_name), getString(R.string.about_body, version),
-                new String[]{getString(R.string.screensaver), getString(R.string.tv_settings), getString(R.string.home_picker)},
-                new Runnable[]{() -> openSettings(Settings.ACTION_DREAM_SETTINGS),
-                        () -> openSettings(Settings.ACTION_SETTINGS),
+                new String[]{getString(R.string.tv_settings), getString(R.string.screensaver),
+                        getString(R.string.show_hidden), getString(R.string.home_picker)},
+                new Runnable[]{() -> openSettings(Settings.ACTION_SETTINGS),
+                        () -> openSettings(Settings.ACTION_DREAM_SETTINGS),
+                        () -> {
+                            apps.unhideAll();
+                            apps.reload();
+                            buildTiles();
+                            focusDock(lastDock);
+                        },
                         () -> openSettings(Settings.ACTION_HOME_SETTINGS)});
     }
 

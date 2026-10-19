@@ -13,8 +13,12 @@ if (-not $backup) { throw 'Run tools\backup.ps1 first.' }
 
 $pkgs = Get-Content $List | ForEach-Object { ($_ -replace '#.*$', '').Trim() } | Where-Object { $_ }
 $log = Join-Path $backup 'changes.log'
+$ok = 0
 foreach ($p in $pkgs) {
     Add-Content -Path $log -Value "$(Get-Date -Format s) disable $p"
-    Write-Host ("{0,-60} {1}" -f $p, (Tv "pm disable-user --user 0 $p"))
+    $out = Tv "pm disable-user --user 0 $p"
+    if ($out -match 'disabled-user') { $ok++; Write-Host ("{0,-55} off" -f $p) }
+    elseif ($out -match 'protected') { Write-Host ("{0,-55} protected by the TV, left on" -f $p) -ForegroundColor DarkGray }
+    else { Write-Host ("{0,-55} {1}" -f $p, ($out -split "`n")[0]) -ForegroundColor Yellow }
 }
-Write-Host "Disabled $($pkgs.Count) package(s). Undo: tools\restore.ps1"
+Write-Host "Switched off $ok of $($pkgs.Count). Undo: tools\restore.ps1"

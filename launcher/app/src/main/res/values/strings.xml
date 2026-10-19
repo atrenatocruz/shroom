@@ -13,6 +13,8 @@
     <string name="remove_favorite">Remove from Top Row</string>
     <string name="add_favorite">Add to Top Row</string>
     <string name="app_info">App Info</string>
+    <string name="hide">Hide</string>
+    <string name="show_hidden">Show Hidden Apps</string>
     <string name="home_options">Home Screen…</string>
     <string name="inputs">Inputs</string>
     <string name="live_tv">Live TV</string>
