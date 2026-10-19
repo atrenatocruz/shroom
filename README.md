@@ -11,17 +11,23 @@ ADB tooling and hard-won TV quirks are reused here; the launcher itself is a new
 
 ![Shroom home screen](docs/home.png)
 
-- A time-of-day sky (dawn, day, dusk, night) behind a big **"Welcome home"** greeting, the date, and a
-  clock top right.
-- A **Home / Apps / Settings** pill at the top. Moving onto a tab switches the page.
-- A **Favorites** row of app banners. The focused one lifts with a spring, and the sky glows in that
-  app's colour.
-- **Hold OK** on a favourite to move it, remove it, or open its app info. Hold OK on any app in Apps to
-  add it to Favorites.
-- **Settings**: Inputs (HDMI, AV, Live TV, shown only if the TV has them), Network, TV Settings, Manage
-  apps, Screensaver, About.
+Laid out like Apple TV, and nothing else on screen:
+
+- **The sky is the top shelf.** A time-of-day sky (dawn, day, dusk, night) and a small clock. No
+  ads, rows, greetings or banners.
+- **The Top Row** of your favourite apps sits in a frosted band. The focused app lifts toward you with a
+  spring and a soft shadow, catches a light sheen, and only then shows its name. The sky glows faintly
+  in that app's colour.
+- **Every other app is underneath.** Press Down and the whole screen glides up, the sky dims, and
+  the Top Row fades away. Up, Back or Home brings it back.
+- **Hold OK** on an app for Move (it jiggles; use Left/Right, then OK), Add to / Remove from Top Row,
+  App Info. **Menu** on the remote (or Hold OK > Home Screen…) has Screensaver, TV Settings and
+  Choose Home App.
+- **Inputs** (HDMI, AV, Live TV) shows up as a tile at the end of the grid on TVs that have them.
 - A drifting **clock screensaver** (OLED-safe): TV Settings > Screensaver > "Shroom clock".
-- No INTERNET permission: it physically cannot show ads or phone home. About 600 KB.
+- No INTERNET permission, so it can't show ads or phone home. About 600 KB.
+
+![All apps](docs/apps.png)
 
 ## What you do on the TV (once)
 
@@ -90,9 +96,8 @@ script disabled what. Keep the `backups\` folder (it stays on this PC and is not
 
 **From the TV alone (no PC):**
 
-- Shroom > Settings > About Shroom > **Choose default home app** (works while the stock launcher is
-  still enabled).
-- Shroom > Settings > Manage apps > *See all apps / Show system apps* > **Google TV Home** (or
+- In Shroom, press **Menu** > **Choose Home App** (works while the stock launcher is still enabled).
+- Menu > TV Settings > Apps > *See all apps / Show system apps* > **Google TV Home** (or
   **Android TV Home**) > **Enable**, then press Home.
 - Anything disabled by debloating can be switched back on from the same place.
 
@@ -126,10 +131,10 @@ The launcher is plain Java with no libraries (`launcher\app\src\main\java\app\sh
 
 | File | What it does |
 |---|---|
-| `MainActivity.java` | Top bar, pages, Favorites, app grid, menus, rearranging, inputs |
-| `Tile.java` | The rounded app card and its focus spring |
+| `MainActivity.java` | Top Row, app grid, the glide between them, menus, rearranging, inputs |
+| `Tile.java` | The app card: lift, shadow, sheen, name on focus, jiggle |
 | `Backdrop.java` | Sky, colour glow, scrims, page dimming (one view, no blur) |
-| `Apps.java` | Installed TV apps and the Favorites order (stored on the TV) |
+| `Apps.java` | Installed TV apps and the Top Row order (stored on the TV) |
 | `Ui.java` | 960x540 layout grid, Outfit font weights, colour sampling |
 | `ClockDream.java` | Screensaver |
 

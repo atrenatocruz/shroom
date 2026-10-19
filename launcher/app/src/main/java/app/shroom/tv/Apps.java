@@ -132,12 +132,4 @@ final class Apps {
         saveFavorites(f);
         return true;
     }
-
-    String name() {
-        return prefs.getString("name", "");
-    }
-
-    void setName(String name) {
-        prefs.edit().putString("name", name == null ? "" : name.trim()).apply();
-    }
 }

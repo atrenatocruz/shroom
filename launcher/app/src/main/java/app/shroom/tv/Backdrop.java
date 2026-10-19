@@ -25,7 +25,6 @@ final class Backdrop extends View {
     private final Paint glowPaint = new Paint();
     private final Paint topScrim = new Paint();
     private final Paint bottomScrim = new Paint();
-    private final Paint leftScrim = new Paint();
     private final Paint dimPaint = new Paint();
     private int glow = Color.TRANSPARENT;
     private float dim;
@@ -79,9 +78,8 @@ final class Backdrop extends View {
     @Override
     protected void onSizeChanged(int w, int h, int ow, int oh) {
         fitWall();
-        topScrim.setShader(new LinearGradient(0, 0, 0, h * 0.26f, 0x8C000000, 0x00000000, Shader.TileMode.CLAMP));
-        bottomScrim.setShader(new LinearGradient(0, h * 0.5f, 0, h, 0x00000000, 0xE6000000, Shader.TileMode.CLAMP));
-        leftScrim.setShader(new LinearGradient(0, 0, w * 0.62f, 0, 0x73000000, 0x00000000, Shader.TileMode.CLAMP));
+        topScrim.setShader(new LinearGradient(0, 0, 0, h * 0.18f, 0x59000000, 0x00000000, Shader.TileMode.CLAMP));
+        bottomScrim.setShader(new LinearGradient(0, h * 0.45f, 0, h, 0x00000000, 0xD9000000, Shader.TileMode.CLAMP));
         updateGlowShader();
     }
 
@@ -109,7 +107,6 @@ final class Backdrop extends View {
         int w = getWidth(), h = getHeight();
         c.drawColor(Color.BLACK);
         if (wall != null) c.drawBitmap(wall, wallMatrix, wallPaint);
-        c.drawRect(0, 0, w, h, leftScrim);
         c.drawRect(0, 0, w, h, topScrim);
         c.drawRect(0, 0, w, h, bottomScrim);
         if (glowPaint.getShader() != null) c.drawRect(0, 0, w, h, glowPaint);

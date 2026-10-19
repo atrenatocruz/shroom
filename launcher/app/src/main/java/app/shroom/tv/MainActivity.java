@@ -25,11 +25,10 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.DecelerateInterpolator;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -38,25 +37,36 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * The home screen, laid out like tvOS: the sky is the top shelf, the Top Row of favourites sits in a
+ * frosted band below it, and the rest of the apps wait underneath. Pressing Down from the Top Row
+ * slides everything up and dims the sky; Up, Back or Home brings it back.
+ */
 public class MainActivity extends Activity {
-    private static final int HOME = 0, APPS = 1, SETTINGS = 2;
-    private static final int GRID_COLUMNS = 5;
-    private static final float TILE_W = 156, TILE_H = 88, GAP = 18, MARGIN = 48;
+    private static final int COLUMNS = 5;
+    private static final float TILE_W = 156, TILE_H = 88, GAP = 18;
+    private static final float BAND_X = 32, BAND_PAD_X = 22, BAND_PAD_TOP = 20, BAND_PAD_BOTTOM = 14;
+    private static final float DOCK_Y = 316;       // top of the Top Row band on the 960 x 540 grid
+    private static final float GRID_GAP = 38;      // band bottom to first grid row
+    private static final float ROW_GAP = 8;        // between grid rows (the name under a tile sits in it)
+    private static final float FOCUS_ROW_Y = 96;   // where a focused grid row settles
+    private static final String ACTION_VIEW_INPUTS = "com.android.tv.action.VIEW_INPUTS";
 
     private Ui ui;
     private Apps apps;
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final PathInterpolator glide = new PathInterpolator(0.2f, 0.8f, 0.2f, 1f);
 
-    private FrameLayout root, content;
+    private FrameLayout root, stage;
     private Backdrop backdrop;
-    private TextView clock, eyebrow, title, dateLine, hint;
-    private final TextView[] tabs = new TextView[3];
-    private final ViewGroup[] pages = new ViewGroup[3];
-    private LinearLayout favRow, appGrid;
-    private HorizontalScrollView favScroll;
-    private Tile[] settingsTiles;
-    private int page = HOME;
-    private int lastFav, lastApp, lastSetting;
+    private TextView clock;
+    private LinearLayout dockRow, grid;
+    private FrameLayout band;
+    private HorizontalScrollView dockScroll;
+    private final List<Tile> dockTiles = new ArrayList<>();
+    private final List<Tile> gridTiles = new ArrayList<>();
+    private boolean inGrid;
+    private int lastDock, lastGrid;
     private int moving = -1;
     private FrameLayout menu;
     private int wallRes;
@@ -68,13 +78,10 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         ui = new Ui(this);
         apps = new Apps(this);
-        readExtras(getIntent());
         buildUi();
         apps.reload();
-        buildFavorites();
-        buildAppGrid();
-        showPage(HOME, false);
-        focusFavorite(0);
+        buildTiles();
+        focusDock(0);
 
         IntentFilter pf = new IntentFilter();
         pf.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -112,28 +119,21 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** Pressing Home while already home: back to the Home page, first favourite. */
+    /** Home pressed while already home: back to the first app in the Top Row. */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        readExtras(intent);
         refreshTime();
         closeMenu();
         endMove();
-        showPage(HOME, true);
-        focusFavorite(0);
+        focusDock(0);
     }
 
-    /** Nothing focused (first start, or the focused view went away): land on the current page. */
+    /** Nothing focused (first start, or the focused view went away): land in the Top Row. */
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus && getCurrentFocus() == null && menu == null) focusPage(page);
-    }
-
-    /** {@code am start -n app.shroom.tv/.MainActivity --es name Renato} personalises the greeting. */
-    private void readExtras(Intent i) {
-        if (i != null && i.hasExtra("name")) apps.setName(i.getStringExtra("name"));
+        if (hasFocus && getCurrentFocus() == null && menu == null) focusDock(lastDock);
     }
 
     private final BroadcastReceiver tick = new BroadcastReceiver() {
@@ -153,8 +153,7 @@ public class MainActivity extends Activity {
 
     private final Runnable reloadApps = () -> {
         apps.reload();
-        buildFavorites();
-        buildAppGrid();
+        buildTiles();
     };
 
     // ---------------------------------------------------------------- layout
@@ -165,363 +164,212 @@ public class MainActivity extends Activity {
         backdrop = new Backdrop(this);
         root.addView(backdrop, new FrameLayout.LayoutParams(-1, -1));
 
-        content = new FrameLayout(this);
-        content.setClipChildren(false);
-        root.addView(content, new FrameLayout.LayoutParams(-1, -1));
+        // Everything that scrolls lives on one stage that slides as a whole: no ScrollView, so the
+        // motion is exactly the one we animate.
+        stage = new FrameLayout(this) {
+            @Override
+            protected void onMeasure(int widthSpec, int heightSpec) {
+                // As tall as its content, even past the bottom of the screen: rows below the fold
+                // must have real size to be focusable.
+                super.onMeasure(widthSpec, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+            }
+        };
+        stage.setClipChildren(false);
+        stage.setClipToPadding(false);
+        root.addView(stage, new FrameLayout.LayoutParams(-1, -2));
 
-        View topBar = buildTopBar();   // first: the pages point their Up focus at its tabs
-        pages[HOME] = buildHomePage();
-        pages[APPS] = buildAppsPage();
-        pages[SETTINGS] = buildSettingsPage();
-        for (ViewGroup p : pages) content.addView(p, new FrameLayout.LayoutParams(-1, -1));
-        content.addView(topBar, new FrameLayout.LayoutParams(-1, ui.u(84), Gravity.TOP));
-
-        setContentView(root);
-    }
-
-    private View buildTopBar() {
-        FrameLayout bar = new FrameLayout(this);
-        bar.setClipChildren(false);
-
-        LinearLayout brand = new LinearLayout(this);
-        brand.setGravity(Gravity.CENTER_VERTICAL);
-        ImageView logo = new ImageView(this);
-        logo.setImageResource(R.drawable.ic_logo);
-        brand.addView(logo, new LinearLayout.LayoutParams(ui.u(22), ui.u(22)));
-        TextView name = ui.text(20, 600, Color.WHITE);
-        name.setText("shroom");
-        name.setLetterSpacing(-0.01f);
-        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(-2, -2);
-        nlp.leftMargin = ui.u(8);
-        brand.addView(name, nlp);
-        FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(-2, -2, Gravity.START | Gravity.CENTER_VERTICAL);
-        blp.leftMargin = ui.u(MARGIN);
-        bar.addView(brand, blp);
-
-        LinearLayout nav = new LinearLayout(this);
-        nav.setGravity(Gravity.CENTER_VERTICAL);
-        nav.setPadding(ui.u(4), ui.u(4), ui.u(4), ui.u(4));
-        nav.setBackground(ui.round(0x33FFFFFF, 22));
-        int[] labels = {R.string.tab_home, R.string.tab_apps, R.string.tab_settings};
-        for (int i = 0; i < 3; i++) {
-            final int idx = i;
-            TextView t = ui.text(15, 500, Color.WHITE);
-            t.setText(labels[i]);
-            t.setGravity(Gravity.CENTER);
-            t.setPadding(ui.u(20), 0, ui.u(20), 0);
-            t.setFocusable(true);
-            t.setId(View.generateViewId());
-            t.setOnFocusChangeListener((v, f) -> {
-                if (f && page != idx) showPage(idx, true);
-                styleTabs();
-            });
-            t.setOnKeyListener((v, code, ev) -> {
-                if (ev.getAction() != KeyEvent.ACTION_DOWN) return false;
-                if (code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_CENTER
-                        || code == KeyEvent.KEYCODE_ENTER) {
-                    focusPage(idx);
-                    return true;
-                }
-                if (code == KeyEvent.KEYCODE_DPAD_UP) return true;
-                if (code == KeyEvent.KEYCODE_DPAD_LEFT && idx == 0) return true;
-                return code == KeyEvent.KEYCODE_DPAD_RIGHT && idx == 2;
-            });
-            tabs[i] = t;
-            nav.addView(t, new LinearLayout.LayoutParams(-2, ui.u(32)));
-        }
-        bar.addView(nav, new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER));
-
-        clock = ui.text(24, 350, Color.WHITE);
-        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.CENTER_VERTICAL);
-        clp.rightMargin = ui.u(MARGIN);
-        bar.addView(clock, clp);
-        return bar;
-    }
-
-    private ViewGroup buildHomePage() {
-        FrameLayout p = new FrameLayout(this);
-        p.setClipChildren(false);
-
-        LinearLayout hero = new LinearLayout(this);
-        hero.setOrientation(LinearLayout.VERTICAL);
-        eyebrow = ui.text(11, 600, 0xE6FFFFFF);
-        eyebrow.setLetterSpacing(0.28f);
-        title = ui.text(54, 600, Color.WHITE);
-        title.setLetterSpacing(-0.02f);
-        dateLine = ui.text(17, 400, 0xF2FFFFFF);
-        hero.addView(eyebrow);
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(-2, -2);
-        tlp.topMargin = ui.u(14);
-        hero.addView(title, tlp);
-        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(-2, -2);
-        dlp.topMargin = ui.u(14);
-        hero.addView(dateLine, dlp);
-        FrameLayout.LayoutParams hlp = new FrameLayout.LayoutParams(-2, -2);
-        hlp.leftMargin = ui.u(MARGIN + 2);
-        hlp.topMargin = ui.u(150);
-        p.addView(hero, hlp);
-
-        TextView favLabel = ui.text(14, 600, Color.WHITE);
-        favLabel.setText(R.string.favorites);
-        FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.START);
-        flp.leftMargin = ui.u(MARGIN + 2);
-        flp.bottomMargin = ui.u(172);
-        p.addView(favLabel, flp);
-
-        hint = ui.text(11, 450, 0xB3FFFFFF);
-        hint.setText(R.string.hint_hold);
-        FrameLayout.LayoutParams hl = new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END);
-        hl.rightMargin = ui.u(MARGIN);
-        hl.bottomMargin = ui.u(172);
-        p.addView(hint, hl);
-
-        favScroll = new HorizontalScrollView(this);
-        favScroll.setHorizontalScrollBarEnabled(false);
-        favScroll.setClipChildren(false);
-        favScroll.setClipToPadding(false);
-        favScroll.setPadding(ui.u(MARGIN), ui.u(16), ui.u(MARGIN), ui.u(16));
-        favScroll.setFillViewport(false);
-        favRow = new LinearLayout(this);
-        favRow.setClipChildren(false);
-        favRow.setClipToPadding(false);
-        favScroll.addView(favRow, new FrameLayout.LayoutParams(-2, -2));
-        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-        slp.bottomMargin = ui.u(30);
-        p.addView(favScroll, slp);
-        return p;
-    }
-
-    private ViewGroup buildAppsPage() {
-        ScrollView s = new ScrollView(this);
-        s.setVerticalScrollBarEnabled(false);
-        s.setClipChildren(false);
-        s.setClipToPadding(false);
-        s.setVerticalFadingEdgeEnabled(true);
-        s.setFadingEdgeLength(ui.u(40));
-        s.setPadding(0, ui.u(84), 0, 0);
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setClipChildren(false);
         col.setClipToPadding(false);
-        col.setPadding(ui.u(MARGIN), ui.u(20), ui.u(MARGIN), ui.u(40));
-        TextView h = ui.text(28, 600, Color.WHITE);
-        h.setText(R.string.all_apps);
-        col.addView(h);
-        appGrid = new LinearLayout(this);
-        appGrid.setOrientation(LinearLayout.VERTICAL);
-        appGrid.setClipChildren(false);
-        appGrid.setClipToPadding(false);
+        col.setPadding(0, ui.u(DOCK_Y), 0, ui.u(60));
+        stage.addView(col, new FrameLayout.LayoutParams(-1, -2));
+
+        band = new FrameLayout(this);
+        band.setBackground(ui.round(0x29FFFFFF, 26));
+        band.setClipChildren(false);
+        band.setClipToPadding(false);
+        dockScroll = new HorizontalScrollView(this);
+        dockScroll.setHorizontalScrollBarEnabled(false);
+        dockScroll.setClipChildren(false);
+        dockScroll.setClipToPadding(false);
+        dockScroll.setPadding(ui.u(BAND_PAD_X), ui.u(BAND_PAD_TOP), ui.u(BAND_PAD_X), ui.u(BAND_PAD_BOTTOM));
+        dockRow = new LinearLayout(this);
+        dockRow.setClipChildren(false);
+        dockRow.setClipToPadding(false);
+        dockScroll.addView(dockRow, new FrameLayout.LayoutParams(-2, -2));
+        band.addView(dockScroll, new FrameLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(-1, -2);
+        blp.leftMargin = ui.u(BAND_X);
+        blp.rightMargin = ui.u(BAND_X);
+        col.addView(band, blp);
+
+        grid = new LinearLayout(this);
+        grid.setOrientation(LinearLayout.VERTICAL);
+        grid.setClipChildren(false);
+        grid.setClipToPadding(false);
         LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(-1, -2);
-        glp.topMargin = ui.u(22);
-        col.addView(appGrid, glp);
-        s.addView(col);
-        return s;
+        glp.leftMargin = ui.u(BAND_X + BAND_PAD_X);
+        glp.topMargin = ui.u(GRID_GAP);
+        col.addView(grid, glp);
+
+        clock = ui.text(19, 400, 0xF2FFFFFF);
+        clock.setShadowLayer(ui.u(6), 0, 0, 0x40000000);
+        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.END);
+        clp.topMargin = ui.u(30);
+        clp.rightMargin = ui.u(BAND_X + 8);
+        root.addView(clock, clp);
+
+        setContentView(root);
     }
 
-    private ViewGroup buildSettingsPage() {
-        FrameLayout p = new FrameLayout(this);
-        p.setClipChildren(false);
-        LinearLayout col = new LinearLayout(this);
-        col.setOrientation(LinearLayout.VERTICAL);
-        col.setClipChildren(false);
-        TextView h = ui.text(28, 600, Color.WHITE);
-        h.setText(R.string.tab_settings);
-        col.addView(h);
+    private void buildTiles() {
+        View had = getCurrentFocus();
+        boolean wasDock = dockTiles.contains(had), wasGrid = gridTiles.contains(had);
 
-        LinearLayout row = new LinearLayout(this);
-        row.setClipChildren(false);
-        float w = 128, hh = 92;
-        List<Tile> t = new ArrayList<>();
-        if (hasInputs()) t.add(action(R.drawable.ic_input, R.string.inputs, w, hh, this::showInputs));
-        t.add(action(R.drawable.ic_wifi, R.string.network, w, hh, () -> openSettings(Settings.ACTION_WIFI_SETTINGS)));
-        t.add(action(R.drawable.ic_settings, R.string.tv_settings, w, hh, () -> openSettings(Settings.ACTION_SETTINGS)));
-        t.add(action(R.drawable.ic_apps, R.string.manage_apps, w, hh, () -> openSettings(Settings.ACTION_APPLICATION_SETTINGS)));
-        t.add(action(R.drawable.ic_moon, R.string.screensaver, w, hh, () -> openSettings(Settings.ACTION_DREAM_SETTINGS)));
-        t.add(action(R.drawable.ic_info, R.string.about, w, hh, this::showAbout));
-        settingsTiles = t.toArray(new Tile[0]);
-        for (int i = 0; i < settingsTiles.length; i++) {
-            final int idx = i;
-            Tile tile = settingsTiles[i];
-            tile.setId(View.generateViewId());
-            tile.setOnFocusChangeListener((v, f) -> {
-                if (f) lastSetting = idx;
-            });
-            tile.setNextFocusDownId(tile.getId());
-            tile.setNextFocusUpId(tabs[SETTINGS].getId());
-            if (i == 0) tile.setNextFocusLeftId(tile.getId());
-            if (i == settingsTiles.length - 1) tile.setNextFocusRightId(tile.getId());
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            if (i > 0) lp.leftMargin = ui.u(16);
-            row.addView(tile, lp);
-        }
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-2, -2);
-        rlp.topMargin = ui.u(22);
-        col.addView(row, rlp);
-
-        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(-2, -2);
-        clp.leftMargin = ui.u(MARGIN);
-        clp.topMargin = ui.u(84 + 20);   // same spot as the Apps heading
-        p.addView(col, clp);
-        return p;
-    }
-
-    private Tile action(int icon, int text, float w, float h, Runnable r) {
-        Tile t = Tile.forAction(ui, icon, getString(text), w, h);
-        t.setOnClickListener(v -> r.run());
-        return t;
-    }
-
-    // ---------------------------------------------------------------- tiles
-
-    private void buildFavorites() {
-        int focused = focusedIndex(favRow);
-        favRow.removeAllViews();
+        dockRow.removeAllViews();
+        dockTiles.clear();
         List<Apps.Entry> favs = apps.favorites();
-        if (favs.isEmpty()) {
-            TextView empty = ui.text(14, 400, 0xB3FFFFFF);
-            empty.setText(R.string.no_favorites);
-            favRow.addView(empty, new LinearLayout.LayoutParams(-2, ui.u(TILE_H)));
-            hint.setVisibility(View.INVISIBLE);
-            return;
-        }
-        hint.setVisibility(View.VISIBLE);
         for (int i = 0; i < favs.size(); i++) {
             final int idx = i;
             final Apps.Entry e = favs.get(i);
             Tile t = Tile.forApp(ui, e, TILE_W, TILE_H);
-            t.setId(View.generateViewId());
-            t.setNextFocusUpId(tabs[HOME].getId());
-            t.setNextFocusDownId(t.getId());
             t.setOnFocusChangeListener((v, f) -> {
                 if (!f) return;
-                lastFav = idx;
+                lastDock = idx;
                 backdrop.setGlow(e.color);
+                showGrid(false);
             });
             t.setOnClickListener(v -> launch(e, v));
             t.setOnLongClickListener(v -> {
-                favoriteMenu(idx, e);
+                dockMenu(idx, e);
                 return true;
             });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            if (i > 0) lp.leftMargin = ui.u(GAP);
-            favRow.addView(t, lp);
+            addSpaced(dockRow, t, i);
+            dockTiles.add(t);
         }
-        // Left of the first tile and right of the last stay put instead of jumping to the top bar.
-        View first = favRow.getChildAt(0), last = favRow.getChildAt(favRow.getChildCount() - 1);
-        first.setNextFocusLeftId(first.getId());
-        last.setNextFocusRightId(last.getId());
-        if (focused >= 0) focusFavorite(Math.min(focused, favs.size() - 1));
-    }
+        if (dockTiles.isEmpty()) {
+            TextView empty = ui.text(14, 400, 0x99FFFFFF);
+            empty.setText(R.string.no_favorites);
+            empty.setGravity(Gravity.CENTER_VERTICAL);
+            dockRow.addView(empty, new LinearLayout.LayoutParams(-2, ui.u(TILE_H)));
+        }
 
-    private void buildAppGrid() {
-        int focused = -1;
-        View f = getCurrentFocus();
-        if (f instanceof Tile && isDescendant(appGrid, f)) focused = lastApp;
-        appGrid.removeAllViews();
+        grid.removeAllViews();
+        gridTiles.clear();
+        List<Apps.Entry> rest = new ArrayList<>(apps.all);
+        rest.removeAll(favs);
+        for (final Apps.Entry e : rest) {
+            Tile t = Tile.forApp(ui, e, TILE_W, TILE_H);
+            t.setOnClickListener(v -> launch(e, v));
+            t.setOnLongClickListener(v -> {
+                gridMenu(e);
+                return true;
+            });
+            gridTiles.add(t);
+        }
+        if (hasInputs()) {
+            Tile t = Tile.forAction(ui, R.drawable.ic_input, getString(R.string.inputs), TILE_W, TILE_H);
+            t.setOnClickListener(v -> showInputs());
+            t.setOnLongClickListener(v -> {
+                homeMenu();
+                return true;
+            });
+            gridTiles.add(t);
+        }
         LinearLayout row = null;
-        for (int i = 0; i < apps.all.size(); i++) {
+        for (int i = 0; i < gridTiles.size(); i++) {
             final int idx = i;
-            final Apps.Entry e = apps.all.get(i);
-            if (i % GRID_COLUMNS == 0) {
+            if (i % COLUMNS == 0) {
                 row = new LinearLayout(this);
                 row.setClipChildren(false);
                 row.setClipToPadding(false);
-                LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
-                if (i > 0) rlp.topMargin = ui.u(20);
-                appGrid.addView(row, rlp);
+                LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-2, -2);
+                if (i > 0) rlp.topMargin = ui.u(ROW_GAP);
+                grid.addView(row, rlp);
             }
-            Tile t = Tile.forApp(ui, e, TILE_W, TILE_H);
-            if (i < GRID_COLUMNS) t.setNextFocusUpId(tabs[APPS].getId());
-            t.setOnFocusChangeListener((v, gained) -> {
-                if (gained) lastApp = idx;
+            Tile t = gridTiles.get(i);
+            View.OnFocusChangeListener prev = t.getOnFocusChangeListener();
+            t.setOnFocusChangeListener((v, f) -> {
+                if (prev != null) prev.onFocusChange(v, f);
+                if (!f) return;
+                lastGrid = idx;
+                showGrid(true);
             });
-            t.setOnClickListener(v -> launch(e, v));
-            t.setOnLongClickListener(v -> {
-                appMenu(e);
-                return true;
-            });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
-            if (i % GRID_COLUMNS > 0) lp.leftMargin = ui.u(GAP);
-            row.addView(t, lp);
+            addSpaced(row, t, i % COLUMNS);
         }
-        if (focused >= 0) focusApp(Math.min(focused, apps.all.size() - 1));
+        wireFocus();
+
+        if (wasDock) focusDock(lastDock);
+        else if (wasGrid) focusGrid(lastGrid);
     }
 
-    private static boolean isDescendant(ViewGroup parent, View v) {
-        for (View p = v; p != null; p = p.getParent() instanceof View ? (View) p.getParent() : null) {
-            if (p == parent) return true;
+    private void addSpaced(LinearLayout row, View v, int indexInRow) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2);
+        if (indexInRow > 0) lp.leftMargin = ui.u(GAP);
+        row.addView(v, lp);
+    }
+
+    /** Deterministic D-pad: edges stay put, Up from the grid's first row returns to the Top Row. */
+    private void wireFocus() {
+        for (Tile t : dockTiles) {
+            t.setId(View.generateViewId());
+            t.setNextFocusUpId(t.getId());
         }
-        return false;
+        for (Tile t : gridTiles) t.setId(View.generateViewId());
+        if (!dockTiles.isEmpty()) {
+            Tile first = dockTiles.get(0), last = dockTiles.get(dockTiles.size() - 1);
+            first.setNextFocusLeftId(first.getId());
+            last.setNextFocusRightId(last.getId());
+            if (gridTiles.isEmpty()) for (Tile t : dockTiles) t.setNextFocusDownId(t.getId());
+        }
+        for (int i = 0; i < gridTiles.size(); i++) {
+            Tile t = gridTiles.get(i);
+            if (i % COLUMNS == 0) t.setNextFocusLeftId(t.getId());
+            if (i % COLUMNS == COLUMNS - 1 || i == gridTiles.size() - 1) t.setNextFocusRightId(t.getId());
+            if (i + COLUMNS >= gridTiles.size()) {
+                // Last row: Down goes to the tile below if the row under is shorter, else stays.
+                t.setNextFocusDownId(t.getId());
+            }
+        }
     }
 
-    private int focusedIndex(LinearLayout row) {
-        View f = getCurrentFocus();
-        for (int i = 0; i < row.getChildCount(); i++) if (row.getChildAt(i) == f) return i;
-        return -1;
-    }
+    // ---------------------------------------------------------------- focus & motion
 
-    private void focusFavorite(int i) {
-        if (favRow.getChildCount() == 0 || !(favRow.getChildAt(0) instanceof Tile)) {
-            tabs[HOME].requestFocusFromTouch();
+    private void focusDock(int i) {
+        if (dockTiles.isEmpty()) {
+            if (!gridTiles.isEmpty()) focusGrid(0);
             return;
         }
-        favRow.getChildAt(Math.max(0, Math.min(i, favRow.getChildCount() - 1))).requestFocusFromTouch();
+        dockTiles.get(Math.max(0, Math.min(i, dockTiles.size() - 1))).requestFocusFromTouch();
     }
 
-    private void focusApp(int i) {
-        if (apps.all.isEmpty()) {
-            tabs[APPS].requestFocusFromTouch();
+    private void focusGrid(int i) {
+        if (gridTiles.isEmpty()) {
+            focusDock(lastDock);
             return;
         }
-        i = Math.max(0, Math.min(i, apps.all.size() - 1));
-        ViewGroup row = (ViewGroup) appGrid.getChildAt(i / GRID_COLUMNS);
-        row.getChildAt(i % GRID_COLUMNS).requestFocusFromTouch();
+        gridTiles.get(Math.max(0, Math.min(i, gridTiles.size() - 1))).requestFocusFromTouch();
     }
 
-    private void focusPage(int p) {
-        if (p == HOME) focusFavorite(lastFav);
-        else if (p == APPS) focusApp(lastApp);
-        else settingsTiles[Math.min(lastSetting, settingsTiles.length - 1)].requestFocusFromTouch();
-    }
-
-    // ---------------------------------------------------------------- pages
-
-    private void showPage(int p, boolean animate) {
-        page = p;
-        for (int i = 0; i < 3; i++) {
-            ViewGroup v = pages[i];
-            boolean on = i == p;
-            v.setDescendantFocusability(on ? ViewGroup.FOCUS_AFTER_DESCENDANTS : ViewGroup.FOCUS_BLOCK_DESCENDANTS);
-            v.animate().cancel();
-            if (!animate) {
-                v.setVisibility(on ? View.VISIBLE : View.GONE);
-                v.setAlpha(1f);
-                v.setTranslationY(0);
-                continue;
-            }
-            if (on) {
-                v.setVisibility(View.VISIBLE);
-                v.setAlpha(0f);
-                v.setTranslationY(ui.u(14));
-                v.animate().alpha(1f).translationY(0).setDuration(280)
-                        .setInterpolator(new DecelerateInterpolator(1.6f)).start();
-            } else if (v.getVisibility() == View.VISIBLE) {
-                v.animate().alpha(0f).setDuration(160).withEndAction(() -> v.setVisibility(View.GONE)).start();
-            }
+    /** Slides the stage so the focused row sits high on screen, or back so the sky shows. */
+    private void showGrid(boolean show) {
+        float target = 0;
+        if (show) {
+            View row = (View) gridTiles.get(lastGrid).getParent();
+            int[] rowLoc = new int[2], stageLoc = new int[2];
+            row.getLocationOnScreen(rowLoc);
+            stage.getLocationOnScreen(stageLoc);
+            float rowTopInStage = rowLoc[1] - stageLoc[1];
+            target = ui.u(FOCUS_ROW_Y) - rowTopInStage;
         }
-        backdrop.setDim(p == HOME ? 0f : 0.62f);
-        if (p != HOME) backdrop.setGlow(0xFF1A1C24);
-        styleTabs();
-    }
-
-    private void styleTabs() {
-        for (int i = 0; i < 3; i++) {
-            TextView t = tabs[i];
-            boolean focused = t.isFocused(), selected = i == page;
-            t.setBackground(focused ? ui.round(Color.WHITE, 16) : selected ? ui.round(0x40FFFFFF, 16) : null);
-            t.setTextColor(focused ? 0xFF111114 : selected ? Color.WHITE : 0xD9FFFFFF);
-            t.setTypeface(ui.font(focused || selected ? 600 : 450));
+        if (show != inGrid) {
+            inGrid = show;
+            backdrop.setDim(show ? 0.6f : 0f);
+            if (show) backdrop.setGlow(0xFF15161B);
+            band.animate().alpha(show ? 0f : 1f).setDuration(show ? 220 : 320).start();
         }
+        stage.animate().translationY(target).setDuration(420).setInterpolator(glide).start();
     }
 
     // ---------------------------------------------------------------- time & sky
@@ -530,13 +378,6 @@ public class MainActivity extends Activity {
         Calendar now = Calendar.getInstance();
         int h = now.get(Calendar.HOUR_OF_DAY);
         clock.setText(DateFormat.format(DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", now));
-        int greet = h >= 5 && h < 12 ? R.string.greet_morning
-                : h >= 12 && h < 18 ? R.string.greet_afternoon
-                : h >= 18 && h < 22 ? R.string.greet_evening : R.string.greet_night;
-        eyebrow.setText(greet);
-        String name = apps.name();
-        title.setText(name.isEmpty() ? getString(R.string.welcome) : getString(R.string.welcome_named, name));
-        dateLine.setText(DateFormat.format(DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEEMMMMd"), now));
 
         int res = h >= 5 && h < 11 ? R.drawable.sky_dawn
                 : h >= 11 && h < 17 ? R.drawable.sky_day
@@ -602,36 +443,40 @@ public class MainActivity extends Activity {
         open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg)));
     }
 
-    private void favoriteMenu(int idx, Apps.Entry e) {
+    private void dockMenu(int idx, Apps.Entry e) {
         showMenu(e.label, null,
-                new String[]{getString(R.string.move), getString(R.string.remove_favorite), getString(R.string.app_info)},
+                new String[]{getString(R.string.move), getString(R.string.remove_favorite),
+                        getString(R.string.app_info), getString(R.string.home_options)},
                 new Runnable[]{() -> startMove(idx), () -> {
                     apps.toggleFavorite(e.pkg);
-                    buildFavorites();
-                    focusFavorite(idx);
-                }, () -> openAppInfo(e.pkg)});
+                    buildTiles();
+                    focusDock(idx);
+                }, () -> openAppInfo(e.pkg), this::homeMenu});
     }
 
-    private void appMenu(Apps.Entry e) {
-        boolean fav = apps.isFavorite(e.pkg);
+    private void gridMenu(Apps.Entry e) {
         showMenu(e.label, null,
-                new String[]{getString(fav ? R.string.remove_favorite : R.string.add_favorite), getString(R.string.app_info)},
+                new String[]{getString(R.string.add_favorite), getString(R.string.app_info),
+                        getString(R.string.home_options)},
                 new Runnable[]{() -> {
                     apps.toggleFavorite(e.pkg);
-                    buildFavorites();
-                    focusApp(lastApp);
-                }, () -> openAppInfo(e.pkg)});
+                    buildTiles();
+                    focusDock(dockTiles.size() - 1);
+                }, () -> openAppInfo(e.pkg), this::homeMenu});
     }
 
-    private void showAbout() {
+    /** The launcher's own options; also on the remote's Menu key. Includes the way back to stock. */
+    private void homeMenu() {
         String version = "";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
-        showMenu(getString(R.string.about), getString(R.string.about_body, version),
-                new String[]{getString(R.string.home_picker)},
-                new Runnable[]{() -> openSettings(Settings.ACTION_HOME_SETTINGS)});
+        showMenu(getString(R.string.app_name), getString(R.string.about_body, version),
+                new String[]{getString(R.string.screensaver), getString(R.string.tv_settings), getString(R.string.home_picker)},
+                new Runnable[]{() -> openSettings(Settings.ACTION_DREAM_SETTINGS),
+                        () -> openSettings(Settings.ACTION_SETTINGS),
+                        () -> openSettings(Settings.ACTION_HOME_SETTINGS)});
     }
 
     // ---------------------------------------------------------------- inputs
@@ -644,7 +489,7 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {
             }
         }
-        return getPackageManager().resolveActivity(new Intent("com.android.tv.action.VIEW_INPUTS"), 0) != null;
+        return getPackageManager().resolveActivity(new Intent(ACTION_VIEW_INPUTS), 0) != null;
     }
 
     private static boolean isTuner(TvInputInfo info) {
@@ -674,7 +519,7 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {
             }
         }
-        Intent panel = new Intent("com.android.tv.action.VIEW_INPUTS");
+        Intent panel = new Intent(ACTION_VIEW_INPUTS);
         if (labels.isEmpty() && getPackageManager().resolveActivity(panel, 0) != null) {
             open(panel);
             return;
@@ -688,60 +533,64 @@ public class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- menu overlay
 
+    /** A tvOS-style context menu: a small dark glass card, centred, one white pill for the focused item. */
     private void showMenu(String heading, String body, String[] labels, Runnable[] actions) {
+        View returnTo = menu != null ? (View) menu.getTag() : getCurrentFocus();
         closeMenu();
-        View returnTo = getCurrentFocus();
         menu = new FrameLayout(this);
-        menu.setBackgroundColor(0x99000000);
+        menu.setBackgroundColor(0x80000000);
         menu.setClickable(true);
 
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackground(ui.round(0xF21C1D22, 20));
-        panel.setPadding(ui.u(22), ui.u(22), ui.u(22), ui.u(18));
-        panel.setElevation(ui.u(24));
-        TextView h = ui.text(20, 600, Color.WHITE);
+        panel.setBackground(ui.round(0xF0232428, 24));
+        panel.setPadding(ui.u(10), ui.u(18), ui.u(10), ui.u(10));
+        panel.setElevation(ui.u(30));
+        TextView h = ui.text(13, 600, 0x99FFFFFF);
         h.setText(heading);
+        h.setPadding(ui.u(14), 0, ui.u(14), 0);
         panel.addView(h);
         if (body != null) {
-            TextView b = ui.text(13, 400, 0xB3FFFFFF);
+            TextView b = ui.text(13, 400, 0x80FFFFFF);
             b.setSingleLine(false);
-            b.setLineSpacing(ui.u(4), 1f);
+            b.setLineSpacing(ui.u(3), 1f);
             b.setText(body);
+            b.setPadding(ui.u(14), 0, ui.u(14), 0);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-            lp.topMargin = ui.u(10);
+            lp.topMargin = ui.u(6);
             panel.addView(b, lp);
         }
         View first = null;
         for (int i = 0; i < labels.length; i++) {
             final Runnable r = actions[i];
-            TextView btn = ui.text(15, 500, Color.WHITE);
+            TextView btn = ui.text(16, 500, Color.WHITE);
             btn.setText(labels[i]);
             btn.setGravity(Gravity.CENTER_VERTICAL);
             btn.setPadding(ui.u(14), 0, ui.u(14), 0);
             btn.setFocusable(true);
             btn.setOnFocusChangeListener((v, f) -> {
-                v.setBackground(f ? ui.round(Color.WHITE, 10) : null);
+                v.setBackground(f ? ui.round(Color.WHITE, 14) : null);
                 ((TextView) v).setTextColor(f ? 0xFF111114 : Color.WHITE);
+                v.animate().scaleX(f ? 1.03f : 1f).scaleY(f ? 1.03f : 1f).setDuration(160).start();
             });
             btn.setOnClickListener(v -> {
                 closeMenu();
                 r.run();
             });
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, ui.u(40));
-            lp.topMargin = ui.u(i == 0 ? 16 : 4);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, ui.u(42));
+            lp.topMargin = ui.u(i == 0 ? 12 : 2);
             panel.addView(btn, lp);
             if (first == null) first = btn;
         }
-        menu.addView(panel, new FrameLayout.LayoutParams(ui.u(330), -2, Gravity.CENTER));
+        menu.addView(panel, new FrameLayout.LayoutParams(ui.u(300), -2, Gravity.CENTER));
         menu.setTag(returnTo);
-        content.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        stage.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         root.addView(menu, new FrameLayout.LayoutParams(-1, -1));
         menu.setAlpha(0f);
-        panel.setScaleX(0.94f);
-        panel.setScaleY(0.94f);
-        menu.animate().alpha(1f).setDuration(160).start();
-        panel.animate().scaleX(1f).scaleY(1f).setDuration(220).setInterpolator(new DecelerateInterpolator()).start();
+        panel.setScaleX(0.92f);
+        panel.setScaleY(0.92f);
+        menu.animate().alpha(1f).setDuration(180).start();
+        panel.animate().scaleX(1f).scaleY(1f).setDuration(260).setInterpolator(glide).start();
         if (first != null) first.requestFocus();
     }
 
@@ -750,35 +599,31 @@ public class MainActivity extends Activity {
         View returnTo = (View) menu.getTag();
         root.removeView(menu);
         menu = null;
-        content.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+        stage.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
         if (returnTo != null && returnTo.isAttachedToWindow()) returnTo.requestFocus();
-        else focusPage(page);
+        else focusDock(lastDock);
     }
 
     // ---------------------------------------------------------------- rearranging
 
     private void startMove(int idx) {
         moving = idx;
-        hint.setText(R.string.hint_move);
-        focusFavorite(idx);
-        View v = favRow.getChildAt(idx);
-        if (v instanceof Tile) ((Tile) v).setMoving(true);
+        focusDock(idx);
+        dockTiles.get(idx).setMoving(true);
     }
 
     private void endMove() {
         if (moving < 0) return;
-        View v = favRow.getChildAt(moving);
-        if (v instanceof Tile) ((Tile) v).setMoving(false);
+        if (moving < dockTiles.size()) dockTiles.get(moving).setMoving(false);
         moving = -1;
-        hint.setText(R.string.hint_hold);
     }
 
     private void moveBy(int dir) {
         if (!apps.moveFavorite(moving, dir)) return;
         moving += dir;
-        buildFavorites();
-        focusFavorite(moving);
-        ((Tile) favRow.getChildAt(moving)).setMoving(true);
+        buildTiles();
+        focusDock(moving);
+        dockTiles.get(moving).setMoving(true);
     }
 
     // ---------------------------------------------------------------- keys
@@ -805,13 +650,32 @@ public class MainActivity extends Activity {
                     break;
             }
         }
+        if (code == KeyEvent.KEYCODE_MENU && menu == null) {
+            if (!down) homeMenu();
+            return true;
+        }
+        // Between the Top Row and the grid, Up and Down are explicit: the nearest-view search would
+        // skip the grid when the focused column has no tile under it.
+        if (down && menu == null) {
+            View f = getCurrentFocus();
+            if (code == KeyEvent.KEYCODE_DPAD_UP) {
+                int i = gridTiles.indexOf(f);
+                if (i >= 0 && i < COLUMNS) {
+                    focusDock(lastDock);
+                    return true;
+                }
+            } else if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                int i = dockTiles.indexOf(f);
+                if (i >= 0) {
+                    if (!gridTiles.isEmpty()) focusGrid(Math.min(i, Math.min(COLUMNS, gridTiles.size()) - 1));
+                    return true;
+                }
+            }
+        }
         if (code == KeyEvent.KEYCODE_BACK) {
             if (!down) {
                 if (menu != null) closeMenu();
-                else if (page != HOME) {
-                    showPage(HOME, true);
-                    focusFavorite(lastFav);
-                }
+                else if (inGrid) focusDock(lastDock);
             }
             return true;   // a launcher never finishes on Back
         }
