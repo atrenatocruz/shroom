@@ -505,18 +505,78 @@ public class MainActivity extends Activity {
         String names = apps.names();
         greeting.setText(names.isEmpty() ? getString(greet) : getString(greet) + ", " + names);
         dateLine.setText(DateFormat.format(DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEEMMMMd"), now));
-        if (!skyLoaded) {
-            skyLoaded = true;
-            new Thread(() -> {
-                BitmapFactory.Options o = new BitmapFactory.Options();
-                o.inPreferredConfig = Bitmap.Config.RGB_565;   // half the memory; grain in the image hides banding
-                Bitmap b = BitmapFactory.decodeResource(getResources(), R.drawable.sky_sunset, o);
-                main.post(() -> backdrop.setWallpaper(b));
-            }, "sky").start();
+        if (!backgroundLoaded) {
+            backgroundLoaded = true;
+            showBackground(apps.prefs().getString("background", SUNSET), 900);
         }
     }
 
-    private boolean skyLoaded;
+    // ---------------------------------------------------------------- backgrounds
+
+    /** The built-in sky; every other background is a JPEG in assets/backgrounds (tools/backgrounds.py). */
+    private static final String SUNSET = "sunset";
+    private boolean backgroundLoaded;
+    private int backgroundToken;
+
+    private List<String> backgrounds() {
+        List<String> out = new ArrayList<>();
+        out.add(SUNSET);
+        try {
+            String[] files = getAssets().list("backgrounds");
+            if (files != null) {
+                java.util.Arrays.sort(files);
+                for (String f : files) if (f.endsWith(".jpg")) out.add(f.substring(0, f.length() - 4));
+            }
+        } catch (java.io.IOException ignored) {
+        }
+        return out;
+    }
+
+    private static String backgroundLabel(String key) {
+        String t = key.replace('-', ' ');
+        return Character.toUpperCase(t.charAt(0)) + t.substring(1);
+    }
+
+    /** Decodes off the main thread; only the latest request is shown, so fast scrolling never stutters. */
+    private void showBackground(String key, int fadeMs) {
+        final int token = ++backgroundToken;
+        new Thread(() -> {
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inPreferredConfig = Bitmap.Config.RGB_565;   // half the memory
+            Bitmap b = null;
+            try {
+                if (!SUNSET.equals(key)) {
+                    try (java.io.InputStream in = getAssets().open("backgrounds/" + key + ".jpg")) {
+                        b = BitmapFactory.decodeStream(in, null, o);
+                    }
+                }
+            } catch (java.io.IOException ignored) {
+                // a picture that was removed: fall back to the sky
+            }
+            if (b == null) b = BitmapFactory.decodeResource(getResources(), R.drawable.sky_sunset, o);
+            final Bitmap bitmap = b;
+            main.post(() -> {
+                if (token == backgroundToken) backdrop.setWallpaper(bitmap, fadeMs);
+            });
+        }, "background").start();
+    }
+
+    /** Settings > Backgrounds: moving through the list changes the screen behind it; OK keeps it, Back undoes. */
+    private void backgroundPicker() {
+        final String current = apps.prefs().getString("background", SUNSET);
+        List<String> keys = backgrounds();
+        String[] labels = new String[keys.size()];
+        Runnable[] pick = new Runnable[keys.size()], preview = new Runnable[keys.size()];
+        int start = 0;
+        for (int i = 0; i < keys.size(); i++) {
+            final String key = keys.get(i);
+            labels[i] = backgroundLabel(key) + (key.equals(current) ? "  ✓" : "");
+            if (key.equals(current)) start = i;
+            preview[i] = () -> showBackground(key, 450);
+            pick[i] = () -> apps.prefs().edit().putString("background", key).apply();
+        }
+        showMenu(getString(R.string.backgrounds), null, labels, pick, preview, () -> showBackground(current, 450), start);
+    }
 
     // ---------------------------------------------------------------- actions
 
@@ -632,6 +692,8 @@ public class MainActivity extends Activity {
             labels.add(getString(R.string.screensaver));
             actions.add(() -> openSettings(Settings.ACTION_DREAM_SETTINGS));
         }
+        labels.add(getString(R.string.backgrounds));
+        actions.add(this::backgroundPicker);
         labels.add(getString(R.string.show_hidden));
         actions.add(() -> {
             apps.unhideAll();
@@ -703,10 +765,21 @@ public class MainActivity extends Activity {
 
     /** A tvOS-style context menu: a small dark glass card, centred, one white pill for the focused item. */
     private void showMenu(String heading, String body, String[] labels, Runnable[] actions) {
+        showMenu(heading, body, labels, actions, null, null, 0);
+    }
+
+    /**
+     * With {@code onFocus}, each item previews itself when focused: the menu moves to the side over a
+     * light scrim so the screen behind shows, and Back runs {@code onCancel}.
+     */
+    private void showMenu(String heading, String body, String[] labels, Runnable[] actions,
+                          Runnable[] onFocus, Runnable onCancel, int startAt) {
         View returnTo = menu != null ? (View) menu.getTag() : getCurrentFocus();
         closeMenu();
+        boolean preview = onFocus != null;
+        menuCancel = onCancel;
         menu = new FrameLayout(this);
-        menu.setBackgroundColor(0x80000000);
+        menu.setBackgroundColor(preview ? 0x1A000000 : 0x80000000);
         menu.setClickable(true);
 
         LinearLayout panel = new LinearLayout(this);
@@ -731,6 +804,7 @@ public class MainActivity extends Activity {
         View first = null;
         for (int i = 0; i < labels.length; i++) {
             final Runnable r = actions[i];
+            final Runnable focusAction = preview ? onFocus[i] : null;
             TextView btn = ui.text(16, 500, Color.WHITE);
             btn.setText(labels[i]);
             btn.setGravity(Gravity.CENTER_VERTICAL);
@@ -740,17 +814,22 @@ public class MainActivity extends Activity {
                 v.setBackground(f ? ui.round(Color.WHITE, 14) : null);
                 ((TextView) v).setTextColor(f ? 0xFF111114 : Color.WHITE);
                 v.animate().scaleX(f ? 1.03f : 1f).scaleY(f ? 1.03f : 1f).setDuration(160).start();
+                if (f && focusAction != null) focusAction.run();
             });
             btn.setOnClickListener(v -> {
+                menuCancel = null;
                 closeMenu();
                 r.run();
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, ui.u(42));
             lp.topMargin = ui.u(i == 0 ? 12 : 2);
             panel.addView(btn, lp);
-            if (first == null) first = btn;
+            if (first == null || i == startAt) first = btn;
         }
-        menu.addView(panel, new FrameLayout.LayoutParams(ui.u(300), -2, Gravity.CENTER));
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(ui.u(preview ? 260 : 300), -2,
+                preview ? Gravity.CENTER_VERTICAL | Gravity.END : Gravity.CENTER);
+        if (preview) plp.rightMargin = ui.u(48);
+        menu.addView(panel, plp);
         menu.setTag(returnTo);
         stage.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
         root.addView(menu, new FrameLayout.LayoutParams(-1, -1));
@@ -762,7 +841,18 @@ public class MainActivity extends Activity {
         if (first != null) first.requestFocus();
     }
 
+    private Runnable menuCancel;
+
+    /** Back in a menu: undo any live preview, then close. */
+    private void cancelMenu() {
+        Runnable c = menuCancel;
+        menuCancel = null;
+        closeMenu();
+        if (c != null) c.run();
+    }
+
     private void closeMenu() {
+        menuCancel = null;
         if (menu == null) return;
         View returnTo = (View) menu.getTag();
         root.removeView(menu);
@@ -842,7 +932,7 @@ public class MainActivity extends Activity {
         }
         if (code == KeyEvent.KEYCODE_BACK) {
             if (!down) {
-                if (menu != null) closeMenu();
+                if (menu != null) cancelMenu();
                 else if (inGrid) focusDock(lastDock);
             }
             return true;   // a launcher never finishes on Back

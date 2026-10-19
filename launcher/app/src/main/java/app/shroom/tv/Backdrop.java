@@ -19,9 +19,12 @@ import android.view.animation.DecelerateInterpolator;
  * scrims that keep text readable, and a dim layer for the Apps and Settings pages. One view, no blur.
  */
 final class Backdrop extends View {
-    private Bitmap wall;
-    private final Matrix wallMatrix = new Matrix();
+    private Bitmap wall, oldWall;
+    private final Matrix wallMatrix = new Matrix(), oldMatrix = new Matrix();
     private final Paint wallPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Paint oldPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    /** Extra darkening for bright pictures, so white text stays readable; animated with the crossfade. */
+    private float shade, oldShade;
     private final Paint glowPaint = new Paint();
     private final Paint topScrim = new Paint();
     private final Paint bottomScrim = new Paint();
@@ -36,22 +39,46 @@ final class Backdrop extends View {
         dimPaint.setColor(Color.BLACK);
     }
 
-    void setWallpaper(Bitmap b) {
+    /** Crossfades to {@code b}; {@code shadeFor} decides how much it is darkened. */
+    void setWallpaper(Bitmap b, int fadeMs) {
         if (b == wall) return;
-        wall = b;
-        fitWall();
         if (wallAnim != null) wallAnim.cancel();
-        wallAnim = ValueAnimator.ofInt(0, 255).setDuration(700);
+        oldWall = wall;
+        oldMatrix.set(wallMatrix);
+        oldShade = shade;
+        wall = b;
+        float target = shadeFor(b);
+        fitWall();
+        wallAnim = ValueAnimator.ofFloat(0f, 1f).setDuration(fadeMs);
+        wallAnim.setInterpolator(new DecelerateInterpolator());
         wallAnim.addUpdateListener(a -> {
-            wallPaint.setAlpha((int) a.getAnimatedValue());
+            float t = (float) a.getAnimatedValue();
+            wallPaint.setAlpha((int) (t * 255));
+            shade = oldShade + (target - oldShade) * t;
+            if (t >= 1f) oldWall = null;
             invalidate();
         });
         wallAnim.start();
     }
 
+    /** Average brightness, sampled small: bright pictures get up to 45% black over them. */
+    private static float shadeFor(Bitmap b) {
+        Bitmap s = Bitmap.createScaledBitmap(b, 32, 18, true);
+        float sum = 0;
+        for (int y = 0; y < 18; y++) {
+            for (int x = 0; x < 32; x++) {
+                int c = s.getPixel(x, y);
+                sum += (0.299f * Color.red(c) + 0.587f * Color.green(c) + 0.114f * Color.blue(c)) / 255f;
+            }
+        }
+        if (s != b) s.recycle();
+        float lum = sum / (32 * 18);
+        return Math.max(0f, Math.min(0.45f, (lum - 0.3f) * 0.9f));
+    }
+
     /** Fades the ambient glow toward {@code color} (opaque RGB; alpha is applied here). */
     void setGlow(int color) {
-        int target = Color.argb(150, Color.red(color), Color.green(color), Color.blue(color));
+        int target = Color.argb(100, Color.red(color), Color.green(color), Color.blue(color));
         if (target == glow) return;
         if (glowAnim != null) glowAnim.cancel();
         glowAnim = ValueAnimator.ofObject(new ArgbEvaluator(), glow, target).setDuration(450);
@@ -106,7 +133,12 @@ final class Backdrop extends View {
     protected void onDraw(Canvas c) {
         int w = getWidth(), h = getHeight();
         c.drawColor(Color.BLACK);
+        if (oldWall != null) c.drawBitmap(oldWall, oldMatrix, oldPaint);
         if (wall != null) c.drawBitmap(wall, wallMatrix, wallPaint);
+        if (shade > 0.001f) {
+            dimPaint.setAlpha((int) (shade * 255));
+            c.drawRect(0, 0, w, h, dimPaint);
+        }
         c.drawRect(0, 0, w, h, topScrim);
         c.drawRect(0, 0, w, h, bottomScrim);
         if (glowPaint.getShader() != null) c.drawRect(0, 0, w, h, glowPaint);

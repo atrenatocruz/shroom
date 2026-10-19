@@ -92,6 +92,11 @@ ADB Debugging on. Tested on a Xiaomi TV F2 65" (Fire OS 8.1.8.5); its list is
 them as "protected" and leaves them on. If a Fire OS update ever blocks the helper, you just get Amazon's
 home screen back; re-run install, or `restore.ps1` to undo everything.
 
+**Backgrounds** (settings button > Backgrounds): the sunset plus your own pictures. Moving through the
+list changes the screen live; OK keeps it, Back undoes. To add or change pictures, put them in a folder
+and run `tools\venv\Scripts\python.exe -I tools\backgrounds.py <folder>`, then `install.ps1` again.
+They're built into the app on this PC only: the folder is git-ignored, so they never go to GitHub.
+
 Hold OK > **Hide** removes a tile from Shroom (the app stays installed); Settings button >
 **Show Hidden Apps** brings them back.
 
