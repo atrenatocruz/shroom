@@ -56,7 +56,7 @@ public class ClockDream extends DreamService {
         @Override
         public void run() {
             Calendar now = Calendar.getInstance();
-            time.setText(DateFormat.format(DateFormat.is24HourFormat(ClockDream.this) ? "H:mm" : "h:mm", now));
+            time.setText(DateFormat.format("HH:mm", now));
             date.setText(DateFormat.format(DateFormat.getBestDateTimePattern(Locale.getDefault(), "EEEEMMMMd"), now));
             box.post(() -> {
                 FrameLayout parent = (FrameLayout) box.getParent();

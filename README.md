@@ -11,21 +11,23 @@ ADB tooling and hard-won TV quirks are reused here; the launcher itself is a new
 
 ![Shroom home screen](docs/home.png)
 
-Laid out like Apple TV, and nothing else on screen:
+Laid out like Apple TV:
 
-- **The sky is the top shelf.** A time-of-day sky (dawn, day, dusk, night) and a small clock. No
-  ads, rows, greetings or banners.
-- **The Top Row** of your favourite apps sits in a frosted band. The focused app lifts toward you with a
-  spring and a soft shadow, catches a light sheen, and only then shows its name. The sky glows faintly
-  in that app's colour.
-- **Every other app is underneath.** Press Down and the whole screen glides up, the sky dims, and
-  the Top Row fades away. Up, Back or Home brings it back.
+- **A red sunset sky** behind everything.
+- **Top left:** "Good morning / afternoon / evening / night, Raquel & Renato" and the date.
+- **Top right:** the weather in °C, a settings button (press Up from the apps), and a 24-hour clock.
+- **The Top Row** of your favourite apps sits centred in a frosted band, with Google Play Store
+  included. The selected app lifts toward you with a spring, a soft shadow and a light sheen, and its
+  name appears underneath.
+- **Every other app is underneath.** Press Down and the whole screen glides up and the sky dims.
+  Up, Back or Home brings it back.
 - **Hold OK** on an app for Move (it jiggles; use Left/Right, then OK), Add to / Remove from Top Row,
-  App Info. **Menu** on the remote (or Hold OK > Home Screen…) has Screensaver, TV Settings and
+  App Info. The **settings button** (or Menu on the remote) has Screensaver, TV Settings and
   Choose Home App.
 - **Inputs** (HDMI, AV, Live TV) shows up as a tile at the end of the grid on TVs that have them.
 - A drifting **clock screensaver** (OLED-safe): TV Settings > Screensaver > "Shroom clock".
-- No INTERNET permission, so it can't show ads or phone home. About 600 KB.
+- No ads and no analytics. The only thing that goes online is the weather: Open-Meteo (free, no
+  account), with an approximate location from geojs.io unless you set a city. About 220 KB.
 
 ![All apps](docs/apps.png)
 
@@ -60,6 +62,12 @@ powershell -ExecutionPolicy Bypass -File tools\install.ps1 -SkipBuild -DisableSt
 That disables (never uninstalls) the stock launcher. If Home then lands anywhere but Shroom, the
 script switches everything back on by itself. On Google TV the setup wizard can grab Home; add
 `-AlsoDisable com.google.android.tungsten.setupwraith` in that case.
+
+Change the names in the greeting, or pin the weather to a city instead of the automatic location:
+
+```powershell
+tools\venv\Scripts\python.exe -I tools\tv.py "am start -n app.shroom.tv/.MainActivity --es names 'Raquel & Renato' --es city Lisbon"
+```
 
 To grab a screenshot of whatever the TV shows (saved in `screenshots\`):
 
@@ -121,14 +129,15 @@ system partition, so nothing survives a reset.
 ## Building
 
 `tools\build.ps1` needs JDK 17 (`winget install Microsoft.OpenJDK.17`) and the Android SDK with
-platform 34 and build-tools 34 in `%LOCALAPPDATA%\Android\Sdk`. The skies are generated, not photos:
-`tools\wallpapers.py` repaints them.
+platform 34 and build-tools 34 in `%LOCALAPPDATA%\Android\Sdk`. The sky is generated, not a photo:
+`tools\wallpapers.py` repaints it.
 
 The launcher is plain Java with no libraries (`launcher\app\src\main\java\app\shroom\tv`):
 
 | File | What it does |
 |---|---|
-| `MainActivity.java` | Top Row, app grid, the glide between them, menus, rearranging, inputs |
+| `MainActivity.java` | Header, Top Row, app grid, the glide between them, menus, rearranging, inputs |
+| `Weather.java` | Current weather from Open-Meteo, in °C |
 | `Tile.java` | The app card: lift, shadow, sheen, name on focus, jiggle |
 | `Backdrop.java` | Sky, colour glow, scrims, page dimming (one view, no blur) |
 | `Apps.java` | Installed TV apps and the Top Row order (stored on the TV) |

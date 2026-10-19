@@ -490,7 +490,7 @@ public class MainActivity extends Activity {
     private void refreshTime() {
         Calendar now = Calendar.getInstance();
         int h = now.get(Calendar.HOUR_OF_DAY);
-        clock.setText(DateFormat.format(DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", now));
+        clock.setText(DateFormat.format("HH:mm", now));
         int greet = h >= 5 && h < 12 ? R.string.greet_morning
                 : h >= 12 && h < 18 ? R.string.greet_afternoon
                 : h >= 18 && h < 22 ? R.string.greet_evening : R.string.greet_night;

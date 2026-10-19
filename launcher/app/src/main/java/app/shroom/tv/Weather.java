@@ -12,7 +12,6 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.util.Locale;
 
 /**
  * Current temperature and conditions from Open-Meteo (free, no account, no key). The location is a
@@ -31,10 +30,9 @@ final class Weather {
         new Thread(() -> {
             try {
                 double[] at = location(prefs, city);
-                boolean fahrenheit = "US".equals(Locale.getDefault().getCountry());
                 JSONObject cur = json("https://api.open-meteo.com/v1/forecast?latitude=" + at[0]
-                        + "&longitude=" + at[1] + "&current=temperature_2m,weather_code,is_day"
-                        + (fahrenheit ? "&temperature_unit=fahrenheit" : "")).getJSONObject("current");
+                        + "&longitude=" + at[1] + "&current=temperature_2m,weather_code,is_day")   // always °C
+                        .getJSONObject("current");
                 long t = Math.round(cur.getDouble("temperature_2m"));
                 String text = t + "°  " + describe(cur.getInt("weather_code"), cur.optInt("is_day", 1) == 1);
                 MAIN.post(() -> cb.onWeather(text));
