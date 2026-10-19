@@ -19,7 +19,7 @@ Laid out like Apple TV:
 - **The Top Row** of your favourite apps sits centred in a frosted band, with Google Play Store
   included. The selected app lifts toward you with a spring, a soft shadow and a light sheen, and its
   name appears underneath.
-- **Every other app is underneath.** Press Down and the whole screen glides up and the sky dims.
+- **Every other app stays out of sight** until you press Down: then the screen glides up, the sky dims and they fade in.
   Up, Back or Home brings it back.
 - **Hold OK** on an app for Move (it jiggles; use Left/Right, then OK), Add to / Remove from Top Row,
   App Info. The **settings button** (or Menu on the remote) has Screensaver, TV Settings and

@@ -250,6 +250,7 @@ public class MainActivity extends Activity {
         col.addView(band, blp);
 
         grid = new LinearLayout(this);
+        grid.setAlpha(0f);   // out of sight until Down: the home shows only the Top Row
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setClipChildren(false);
         grid.setClipToPadding(false);
@@ -492,6 +493,7 @@ public class MainActivity extends Activity {
             if (show) backdrop.setGlow(0xFF15161B);
             band.animate().alpha(show ? 0f : 1f).setDuration(show ? 220 : 320).start();
             topFade.animate().alpha(show ? 1f : 0f).setDuration(show ? 220 : 320).start();
+            grid.animate().alpha(show ? 1f : 0f).setDuration(show ? 320 : 200).start();
             header.animate().alpha(show ? 0f : 1f).setDuration(show ? 200 : 320).start();
         }
         stage.animate().translationY(target).setDuration(420).setInterpolator(glide).start();
