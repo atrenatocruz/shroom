@@ -61,12 +61,9 @@ That disables (never uninstalls) the stock launcher. If Home then lands anywhere
 script switches everything back on by itself. On Google TV the setup wizard can grab Home; add
 `-AlsoDisable com.google.android.tungsten.setupwraith` in that case.
 
-The TV-side settings that need a PC:
+To grab a screenshot of whatever the TV shows (saved in `screenshots\`):
 
 ```powershell
-# Your name in the greeting ("Welcome home, Renato")
-tools\venv\Scripts\python.exe -I tools\tv.py "am start -n app.shroom.tv/.MainActivity --es name Renato"
-# Screenshot of whatever the TV shows, into screenshots\
 powershell -ExecutionPolicy Bypass -File tools\screenshot.ps1
 ```
 
