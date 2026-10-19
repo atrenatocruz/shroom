@@ -99,7 +99,7 @@ They're built into the app on this PC only: the folder is git-ignored, so they n
 
 **Custom icons and names**: put pictures named after each app's package (`com.netflix.ninja.jpg`) in a
 folder, plus an optional `labels.txt` with lines like `ar.tvplayer.tv=TV`, then run
-`toolsenv\Scripts\python.exe -I tools\icons.py <folder>` and `install.ps1` again. Also git-ignored.
+`toolsenvScriptspython.exe -I toolsicons.py <folder>` and `install.ps1` again. Also git-ignored.
 
 Hold OK > **Hide** removes a tile from Shroom (the app stays installed); Settings button >
 **Show Hidden Apps** brings them back.
