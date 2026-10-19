@@ -1,0 +1,58 @@
+# Xiaomi TV F2 65" Fire TV (L65MB-FPEU, model AFTBR92D74, codename ginzaeu), Fire OS 8.1.8.5 / Android 11 (SDK 30)
+#
+# Fire OS locks Home to com.amazon.tv.launcher (priority 950, protected), so Shroom runs with its Home helper
+# instead (tools\install.ps1 -HomeHelper). This list only switches off Amazon's ads, tracking and preloads.
+# Apply:  powershell -ExecutionPolicy Bypass -File tools\debloat.ps1 debloat\xiaomi-f2-fire-tv\debloat.txt
+# Undo:   powershell -ExecutionPolicy Bypass -File tools\restore.ps1
+# Everything is DISABLED for user 0, not uninstalled. A line starting with # is kept on.
+#
+# Never touched: com.amazon.tv.launcher, firehomestarter, settings (tv.settings.*), quicksettings, livetv and
+# mediatek.livetv (HDMI / tuner), tv.ime (keyboard), venezia (Appstore), fireinputdevices / bluetooth (remote),
+# identity / dcp / device.sync (Amazon account), oobe (setup), webview, and your streaming apps.
+
+# --- Tracking and analytics -------------------------------------------------------------------------------
+com.amazon.tv.acr                      # Automatic Content Recognition: watches what is on screen
+com.amazon.hybridadidservice           # advertising ID
+com.fireos.usagestats.proxy            # app usage statistics
+com.amazon.device.metrics
+com.amazon.client.metrics.api
+com.amazon.device.telemetry.emitter
+com.amazon.device.logmanager
+com.amazon.device.crashmanager
+com.amazon.dp.logger
+com.amazon.perfcollection
+com.amazon.perfc
+com.amazon.wirelessmetrics.service
+com.amazon.neo.minerva
+com.amazon.neo.minerva.logcat
+
+# --- Ads, sponsored rows and shopping ---------------------------------------------------------------------
+com.amazon.ftvads.deeplinking          # sponsored tiles and banners
+com.amazon.media.recommendations       # "recommended for you" rows
+com.amazon.sneakpeek                   # autoplaying previews
+com.amazon.shoptv.client               # Amazon shopping on TV
+com.amazon.tv.democontent.provider     # shop-floor demo videos
+
+# --- Tutorials and promos ---------------------------------------------------------------------------------
+com.amazon.storm.lightning.tutorial
+com.amazon.tmm.tutorial
+com.amazon.tv.releasenotes
+
+# --- Optional: Amazon preloads (switched off only if you said so) -----------------------------------------
+#ALEXA com.amazon.alexamediaplayer.runtime.ftv
+#ALEXA com.amazon.alexa.datastore.app
+#ALEXA com.amazon.alexa.externalmediaplayer.fireos
+#ALEXA com.amazon.alexadirectivebrokerservice
+#ALEXA com.amazon.tv.alexanotifications
+#ALEXA com.amazon.tv.alexaalerts
+#ALEXA com.amazon.audiohome
+#AMAZONAPPS com.amazon.bueller.photos            # Amazon Photos
+#AMAZONAPPS com.amazon.bueller.music             # Amazon Music
+#AMAZONAPPS com.amazon.gamehub                   # Luna / GameHub
+#AMAZONAPPS com.amazon.minitv.android.app        # Amazon MiniTV
+#AMAZONAPPS com.amazon.tahoe                     # Amazon Kids
+#AMAZONAPPS com.amazon.wifilocker                # saves Wi-Fi passwords to Amazon's cloud
+#UPDATES com.amazon.device.software.ota
+#UPDATES com.amazon.device.software.ota.override
+#UPDATES com.amazon.tv.forcedotaupdater.v2
+#CAST com.amazon.cast.sink                       # Miracast / screen mirroring from Android phones

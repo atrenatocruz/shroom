@@ -6,12 +6,15 @@
 #   -DisableStock   needed on most Google TV sets, where the stock launcher keeps Home otherwise.
 #                   Rolled back automatically if Home does not land on Shroom.
 #   -AlsoDisable    other packages that grab Home (Google TV's setup wizard), disabled with the stock one.
+#   -HomeHelper     for TVs that lock Home (Fire OS): turn on Shroom's accessibility service, which opens
+#                   Shroom whenever the stock home screen appears. Nothing is disabled.
 param(
     [string]$TvHost,
     [switch]$SkipBuild,
     [switch]$DisableStock,
     [string]$StockLauncher = '',
-    [string[]]$AlsoDisable = @()
+    [string[]]$AlsoDisable = @(),
+    [switch]$HomeHelper
 )
 . "$PSScriptRoot\common.ps1"
 Use-TvHost $TvHost | Out-Null
@@ -50,6 +53,29 @@ $now = Get-HomeComponent
 if ($now -like "$ShroomPkg/*") {
     Write-Host "Done. Home is Shroom." -ForegroundColor Green
     exit 0
+}
+
+# 5a. Fire OS: the stock launcher can't be disabled, so Shroom steps in front of it instead.
+if ($HomeHelper) {
+    $svc = "$ShroomPkg/app.shroom.tv.HomeService"
+    $cur = Tv 'settings get secure enabled_accessibility_services'
+    if ($cur -notlike "*$svc*") {
+        $val = if (-not $cur -or $cur -eq 'null') { $svc } else { "${cur}:$svc" }
+        Add-Content -Path (Join-Path $backup 'changes.log') -Value "$(Get-Date -Format s) accessibility $svc"
+        Tv "settings put secure enabled_accessibility_services $val" | Out-Null
+        Tv 'settings put secure accessibility_enabled 1' | Out-Null
+    }
+    Start-Sleep -Seconds 2
+    Tv 'input keyevent KEYCODE_HOME' | Out-Null
+    Start-Sleep -Seconds 3
+    $top = Tv 'dumpsys activity activities | grep -m1 -e topResumedActivity -e mResumedActivity'
+    if ($top -match [regex]::Escape($ShroomPkg)) {
+        Write-Host "Done. The Home button now opens Shroom (Amazon's home stays installed underneath)." -ForegroundColor Green
+        exit 0
+    }
+    Write-Host "The helper is on, but Home still showed: $top" -ForegroundColor Yellow
+    Write-Host 'Fire OS may be blocking it. restore.ps1 turns it off again.'
+    exit 3
 }
 
 # 5. The stock launcher still wins: it has to be disabled (not uninstalled) to free the Home slot.

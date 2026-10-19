@@ -41,6 +41,7 @@ final class Apps {
     private static final List<String> SUGGESTED = Arrays.asList(
             "com.netflix.ninja",
             "com.google.android.youtube.tv",
+            "com.amazon.firetv.youtube",
             "com.apple.atve.androidtv.appletv",
             "com.disney.disneyplus",
             "com.amazon.amazonvideo.livingroom",

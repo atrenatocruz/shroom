@@ -24,6 +24,10 @@ $cmds = @($toEnable | ForEach-Object { "pm enable $_" })
 if ($homeBefore -and $homeBefore -ne 'android' -and $homeBefore -notlike "$ShroomPkg/*") {
     $cmds += "cmd package set-home-activity --user 0 $homeBefore"
 }
+# Accessibility services back to what the backup had (drops Shroom's Home helper).
+$acc = Get-Content (Join-Path $Backup 'settings-secure.txt') | Where-Object { $_ -like 'enabled_accessibility_services=*' } | Select-Object -First 1
+if ($acc -and $acc.Substring(31)) { $cmds += "settings put secure enabled_accessibility_services $($acc.Substring(31))" }
+else { $cmds += 'settings delete secure enabled_accessibility_services' }
 if ($Uninstall) { $cmds += "pm uninstall $ShroomPkg" }
 if ($cmds.Count -gt 0) { TvBatch $cmds | Write-Host }
 Tv 'input keyevent KEYCODE_HOME' | Out-Null

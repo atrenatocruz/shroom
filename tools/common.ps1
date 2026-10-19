@@ -25,6 +25,8 @@ function Use-TvHost([string]$TvHost) {
     $parts = $TvHost.Split(':')
     $env:TV_HOST = $parts[0]
     $env:TV_PORT = if ($parts.Count -gt 1) { $parts[1] } else { '5555' }
+    # Each TV gets its own backups, so a restore can never use another device's snapshot.
+    $script:Backups = Join-Path (Join-Path $Repo 'backups') ($TvHost -replace '[:\\/]', '_')
     return $TvHost
 }
 

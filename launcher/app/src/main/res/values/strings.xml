@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">Shroom</string>
     <string name="dream_name">Shroom clock</string>
+    <string name="home_service_name">Shroom Home button</string>
+    <string name="home_service_description">Opens Shroom whenever the stock home screen appears. It reads nothing on screen.</string>
     <string name="greet_morning">Good morning</string>
     <string name="greet_afternoon">Good afternoon</string>
     <string name="greet_evening">Good evening</string>

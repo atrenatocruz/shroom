@@ -45,6 +45,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Fire OS keeps Home locked to its own launcher; this brings Shroom up over it. Opt-in:
+             tools\install.ps1 -HomeHelper. See HomeService. -->
+        <service
+            android:name=".HomeService"
+            android:label="@string/home_service_name"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/home_service" />
+        </service>
+
         <!-- Screensaver: pick "Shroom clock" in the TV's screensaver settings. -->
         <service
             android:name=".ClockDream"
