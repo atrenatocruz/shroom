@@ -539,8 +539,25 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Fire OS answers the standard Settings action by bouncing through its home screen (which the Home
+     * helper would cover); its real settings screen opens directly by name.
+     */
+    private static final android.content.ComponentName FIRE_SETTINGS =
+            new android.content.ComponentName("com.amazon.tv.launcher", "com.amazon.tv.launcher.ui.MainSettingsActivity");
+
+    private Intent tvSettingsIntent() {
+        Intent fire = new Intent().setComponent(FIRE_SETTINGS);
+        if (getPackageManager().resolveActivity(fire, 0) != null) return fire;
+        return new Intent(Settings.ACTION_SETTINGS);
+    }
+
+    private boolean canOpen(String action) {
+        return getPackageManager().resolveActivity(new Intent(action), 0) != null;
+    }
+
     private void openSettings(String action) {
-        open(new Intent(action));
+        open(Settings.ACTION_SETTINGS.equals(action) ? tvSettingsIntent() : new Intent(action));
     }
 
     private void open(Intent i) {
@@ -548,10 +565,10 @@ public class MainActivity extends Activity {
         try {
             startActivity(i);
         } catch (ActivityNotFoundException | SecurityException e) {
-            if (!Settings.ACTION_SETTINGS.equals(i.getAction())) {
+            if (!Settings.ACTION_SETTINGS.equals(i.getAction()) && !FIRE_SETTINGS.equals(i.getComponent())) {
                 // Many TVs ship a trimmed Settings app: fall back to its main page.
                 try {
-                    startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    startActivity(tvSettingsIntent().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                     return;
                 } catch (ActivityNotFoundException ignored) {
                 }
@@ -606,18 +623,28 @@ public class MainActivity extends Activity {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
+        // Only offer what this TV actually has (Fire OS has no screensaver or home-picker screens).
+        List<String> labels = new ArrayList<>();
+        List<Runnable> actions = new ArrayList<>();
+        labels.add(getString(R.string.tv_settings));
+        actions.add(() -> openSettings(Settings.ACTION_SETTINGS));
+        if (canOpen(Settings.ACTION_DREAM_SETTINGS)) {
+            labels.add(getString(R.string.screensaver));
+            actions.add(() -> openSettings(Settings.ACTION_DREAM_SETTINGS));
+        }
+        labels.add(getString(R.string.show_hidden));
+        actions.add(() -> {
+            apps.unhideAll();
+            apps.reload();
+            buildTiles();
+            focusDock(lastDock);
+        });
+        if (canOpen(Settings.ACTION_HOME_SETTINGS)) {
+            labels.add(getString(R.string.home_picker));
+            actions.add(() -> openSettings(Settings.ACTION_HOME_SETTINGS));
+        }
         showMenu(getString(R.string.app_name), getString(R.string.about_body, version),
-                new String[]{getString(R.string.tv_settings), getString(R.string.screensaver),
-                        getString(R.string.show_hidden), getString(R.string.home_picker)},
-                new Runnable[]{() -> openSettings(Settings.ACTION_SETTINGS),
-                        () -> openSettings(Settings.ACTION_DREAM_SETTINGS),
-                        () -> {
-                            apps.unhideAll();
-                            apps.reload();
-                            buildTiles();
-                            focusDock(lastDock);
-                        },
-                        () -> openSettings(Settings.ACTION_HOME_SETTINGS)});
+                labels.toArray(new String[0]), actions.toArray(new Runnable[0]));
     }
 
     // ---------------------------------------------------------------- inputs
