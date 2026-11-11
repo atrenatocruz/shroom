@@ -176,7 +176,9 @@ final class Apps {
         return labels;
     }
 
+    /** Custom icons belong to Rachel's Theme; Ná's Theme shows each app's own banner. */
     private Bitmap customIcon(String pkg) {
+        if ("na".equals(prefs.getString("theme", ""))) return null;
         try (java.io.InputStream in = ctx.getAssets().open("icons/" + pkg + ".jpg")) {
             return BitmapFactory.decodeStream(in);
         } catch (java.io.IOException e) {

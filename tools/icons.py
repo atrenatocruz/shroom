@@ -13,7 +13,7 @@ import sys
 
 from PIL import Image, ImageOps
 
-SIZE = 360
+SIZE = 720
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "launcher", "app", "src", "main",
                    "assets", "icons")
 

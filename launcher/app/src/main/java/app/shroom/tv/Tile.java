@@ -77,7 +77,7 @@ final class Tile extends LinearLayout {
         setClipToPadding(false);
 
         card = new FrameLayout(ui.ctx);
-        card.setBackground(ui.round(bg, 14));
+        card.setBackground(ui.round(bg, ui.tileRadius()));
         card.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
         card.setClipToOutline(true);
         card.addView(content);
@@ -95,7 +95,7 @@ final class Tile extends LinearLayout {
         // Light falling across glass: brighter at the top, gone by the middle.
         GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                 new int[]{0x38FFFFFF, 0x0DFFFFFF, 0x00FFFFFF});
-        g.setCornerRadius(ui.u(14));
+        g.setCornerRadius(ui.u(ui.tileRadius()));
         sheen = g;
     }
 

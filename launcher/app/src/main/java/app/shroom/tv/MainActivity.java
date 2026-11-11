@@ -225,11 +225,12 @@ public class MainActivity extends Activity {
         col.setOrientation(LinearLayout.VERTICAL);
         col.setClipChildren(false);
         col.setClipToPadding(false);
-        col.setPadding(0, ui.u(DOCK_Y), 0, ui.u(60));
+        // Ná's Theme: the Top Row sits higher, so the first row of the other apps shows under it.
+        col.setPadding(0, ui.u(ui.glass ? 236 : DOCK_Y), 0, ui.u(60));
         stage.addView(col, new FrameLayout.LayoutParams(-1, -2));
 
         band = new FrameLayout(this);
-        band.setBackground(ui.round(0x29FFFFFF, 26));
+        band.setBackground(ui.glass ? ui.glassPane(0x3DFFFFFF, 0x17FFFFFF, 40) : ui.round(0x29FFFFFF, 26));
         band.setClipChildren(false);
         band.setClipToPadding(false);
         dockScroll = new HorizontalScrollView(this);
@@ -250,7 +251,7 @@ public class MainActivity extends Activity {
         col.addView(band, blp);
 
         grid = new LinearLayout(this);
-        grid.setAlpha(0f);   // out of sight until Down: the home shows only the Top Row
+        grid.setAlpha(ui.glass ? 1f : 0f);   // Rachel's Theme: out of sight until Down, the home shows only the Top Row
         grid.setOrientation(LinearLayout.VERTICAL);
         grid.setClipChildren(false);
         grid.setClipToPadding(false);
@@ -489,11 +490,11 @@ public class MainActivity extends Activity {
         }
         if (show != inGrid) {
             inGrid = show;
-            backdrop.setDim(show ? 0.6f : 0f);
+            backdrop.setDim(show ? (ui.glass ? 0.4f : 0.6f) : 0f);
             if (show) backdrop.setGlow(0xFF15161B);
             band.animate().alpha(show ? 0f : 1f).setDuration(show ? 220 : 320).start();
             topFade.animate().alpha(show ? 1f : 0f).setDuration(show ? 220 : 320).start();
-            grid.animate().alpha(show ? 1f : 0f).setDuration(show ? 320 : 200).start();
+            grid.animate().alpha(show || ui.glass ? 1f : 0f).setDuration(show ? 320 : 200).start();
             header.animate().alpha(show ? 0f : 1f).setDuration(show ? 200 : 320).start();
         }
         stage.animate().translationY(target).setDuration(420).setInterpolator(glide).start();
@@ -524,17 +525,30 @@ public class MainActivity extends Activity {
     // ---------------------------------------------------------------- backgrounds
 
     /** The built-in sky; every other background is a JPEG in assets/backgrounds (tools/backgrounds.py). */
-    private static final String SUNSET = "sunset";
+    private static final String SUNSET = "sunset", AURORA = "aurora";
     private boolean backgroundLoaded;
     private int backgroundToken, backgroundDay;
 
+    /** Each theme has its own built-in background and remembers its own choice. */
+    private String builtIn() {
+        return ui.glass ? AURORA : SUNSET;
+    }
+
+    private String backgroundPref() {
+        return ui.glass ? "background_na" : "background";
+    }
+
+    private String dailyPref() {
+        return ui.glass ? "background_daily_na" : "background_daily";
+    }
+
     private boolean dailyBackground() {
-        return apps.prefs().getBoolean("background_daily", false);
+        return apps.prefs().getBoolean(dailyPref(), false);
     }
 
     /** The chosen picture, or with "Change Every Day" on, the next one in the list each day. */
     private String currentBackground() {
-        if (!dailyBackground()) return apps.prefs().getString("background", SUNSET);
+        if (!dailyBackground()) return apps.prefs().getString(backgroundPref(), builtIn());
         List<String> all = backgrounds();
         long day = System.currentTimeMillis() / 86_400_000L
                 + java.util.TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 86_400_000L;
@@ -543,7 +557,7 @@ public class MainActivity extends Activity {
 
     private List<String> backgrounds() {
         List<String> out = new ArrayList<>();
-        out.add(SUNSET);
+        out.add(builtIn());
         try {
             String[] files = getAssets().list("backgrounds");
             if (files != null) {
@@ -568,7 +582,9 @@ public class MainActivity extends Activity {
             o.inPreferredConfig = Bitmap.Config.RGB_565;   // half the memory
             Bitmap b = null;
             try {
-                if (!SUNSET.equals(key)) {
+                if (AURORA.equals(key)) {
+                    b = BitmapFactory.decodeResource(getResources(), R.drawable.sky_aurora, o);
+                } else if (!SUNSET.equals(key)) {
                     try (java.io.InputStream in = getAssets().open("backgrounds/" + key + ".jpg")) {
                         b = BitmapFactory.decodeStream(in, null, o);
                     }
@@ -596,7 +612,7 @@ public class MainActivity extends Activity {
         labels[0] = getString(R.string.change_daily) + (daily ? "  ✓" : "");
         preview[0] = () -> showBackground(current, 450);
         pick[0] = () -> {
-            apps.prefs().edit().putBoolean("background_daily", !daily).apply();
+            apps.prefs().edit().putBoolean(dailyPref(), !daily).apply();
             showBackground(currentBackground(), 450);
         };
         int start = 0;
@@ -605,9 +621,28 @@ public class MainActivity extends Activity {
             labels[i + 1] = backgroundLabel(key) + (!daily && key.equals(current) ? "  ✓" : "");
             if (!daily && key.equals(current)) start = i + 1;
             preview[i + 1] = () -> showBackground(key, 450);
-            pick[i + 1] = () -> apps.prefs().edit().putString("background", key).putBoolean("background_daily", false).apply();
+            pick[i + 1] = () -> apps.prefs().edit().putString(backgroundPref(), key).putBoolean(dailyPref(), false).apply();
         }
         showMenu(getString(R.string.backgrounds), null, labels, pick, preview, () -> showBackground(current, 450), start);
+    }
+
+    /** Settings > Themes: the whole screen is rebuilt in the chosen look. */
+    private void themePicker() {
+        String[] keys = {"rachel", "na"};
+        String[] labels = {getString(R.string.theme_rachel), getString(R.string.theme_na)};
+        Runnable[] pick = new Runnable[keys.length];
+        int current = ui.glass ? 1 : 0;
+        for (int i = 0; i < keys.length; i++) {
+            final String key = keys[i];
+            final boolean same = i == current;
+            if (same) labels[i] += "  ✓";
+            pick[i] = () -> {
+                if (same) return;
+                apps.prefs().edit().putString("theme", key).apply();
+                recreate();
+            };
+        }
+        showMenu(getString(R.string.themes), null, labels, pick, null, null, current);
     }
 
     // ---------------------------------------------------------------- actions
@@ -724,6 +759,8 @@ public class MainActivity extends Activity {
             labels.add(getString(R.string.screensaver));
             actions.add(() -> openSettings(Settings.ACTION_DREAM_SETTINGS));
         }
+        labels.add(getString(R.string.themes));
+        actions.add(this::themePicker);
         labels.add(getString(R.string.backgrounds));
         actions.add(this::backgroundPicker);
         labels.add(getString(R.string.show_hidden));
@@ -818,7 +855,7 @@ public class MainActivity extends Activity {
 
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setBackground(ui.round(0xF0232428, 24));
+        panel.setBackground(ui.glass ? ui.glassPane(0xD94A4C54, 0xD9202126, 30) : ui.round(0xF0232428, 24));
         panel.setPadding(ui.u(10), ui.u(18), ui.u(10), ui.u(10));
         panel.setElevation(ui.u(30));
         TextView h = ui.text(13, 600, 0x99FFFFFF);
@@ -859,7 +896,7 @@ public class MainActivity extends Activity {
             btn.setPadding(ui.u(14), 0, ui.u(14), 0);
             btn.setFocusable(true);
             btn.setOnFocusChangeListener((v, f) -> {
-                v.setBackground(f ? ui.round(Color.WHITE, 14) : null);
+                v.setBackground(f ? ui.round(Color.WHITE, ui.glass ? 21 : 14) : null);
                 ((TextView) v).setTextColor(f ? 0xFF111114 : Color.WHITE);
                 v.animate().scaleX(f ? 1.03f : 1f).scaleY(f ? 1.03f : 1f).setDuration(160).start();
                 if (f && focusAction != null) focusAction.run();

@@ -67,7 +67,30 @@ def sky(name, top, horizon, sun_xy, sun_rgb, cloud_dark, cloud_lit, cover, seed,
     return name, pic
 
 
+def aurora(name, seed=11):
+    """Ná's Theme: soft lights of colour flowing through the dark, like Apple's own wallpapers."""
+    y = np.linspace(0, 1, H, dtype=np.float32)[:, None].repeat(W, 1)
+    x = np.linspace(0, 1, W, dtype=np.float32)[None, :].repeat(H, 0)
+    # Bend the canvas with slow noise so the lights flow like silk instead of sitting as round blobs.
+    wx = x + (noise(seed, octaves=3, base=2) - 0.5) * 0.55
+    wy = y + (noise(seed + 1, octaves=3, base=2) - 0.5) * 0.55
+    img = np.zeros((H, W, 3), np.float32) + np.array((7, 8, 20), np.float32)
+    lights = [  # x, y, radius, colour
+        (0.12, 0.30, 0.42, (96, 52, 210)),     # violet
+        (0.88, 0.12, 0.40, (214, 50, 128)),    # magenta
+        (0.80, 0.92, 0.45, (20, 150, 190)),    # teal
+        (0.30, 1.00, 0.40, (34, 70, 215)),     # blue
+        (0.55, 0.50, 0.22, (240, 120, 70)),    # a warm ember in the middle
+    ]
+    for lx, ly, r, rgb in lights:
+        d2 = ((wx - lx) * 1.78) ** 2 + (wy - ly) ** 2
+        img += np.array(rgb, np.float32) * np.exp(-d2 / (2 * (r * 0.62) ** 2))[..., None] * 0.8
+    grain = np.random.default_rng(seed + 3).normal(0, 1.8, (H, W, 1)).astype(np.float32)
+    return name, Image.fromarray(np.clip(img + grain, 0, 255).astype(np.uint8))
+
+
 SKIES = [
+    aurora("sky_aurora"),
     # Deep blue overhead, a red-orange sunset burning through the cloud deck from low on the left.
     sky("sky_sunset", (22, 30, 78), (232, 64, 26), (0.22, 0.97), (255, 78, 18),
         (34, 34, 78), (255, 88, 34), 0.68, 37),

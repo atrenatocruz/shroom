@@ -21,8 +21,12 @@ final class Ui {
     final float unit;
     private final SparseArray<Typeface> fonts = new SparseArray<>();
 
+    /** Ná's Theme: the tvOS 26 "Liquid Glass" look. Off is Rachel's Theme, the original. */
+    final boolean glass;
+
     Ui(Context ctx) {
         this.ctx = ctx;
+        glass = "na".equals(ctx.getSharedPreferences("shroom", Context.MODE_PRIVATE).getString("theme", ""));
         DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
         unit = Math.max(dm.widthPixels, dm.heightPixels) / 960f;
     }
@@ -60,6 +64,18 @@ final class Ui {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);
         g.setCornerRadius(radius * unit);
+        return g;
+    }
+
+    float tileRadius() {
+        return glass ? 22 : 14;
+    }
+
+    /** A pane of glass: lighter at the top, with a thin bright rim. */
+    GradientDrawable glassPane(int top, int bottom, float radius) {
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{top, bottom});
+        g.setCornerRadius(radius * unit);
+        g.setStroke(Math.max(1, u(0.75f)), 0x47FFFFFF);
         return g;
     }
 
